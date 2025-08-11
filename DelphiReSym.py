@@ -1,1 +1,0 @@
-src/ghidra_scripts/DelphiReSym.py
