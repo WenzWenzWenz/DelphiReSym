@@ -89,6 +89,7 @@ For an in-depth explanation of Delphi's executable format evolution, refer to my
 
 4. **Load the Script**:
 
+   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version) or alternatively from [src](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/src/ghidra_scripts/DelphiReSym.py).
    * Go to **Window > Script Manager** (green ▶️ button).
    * Click the **“Manage Script Directories”** button (the button which looks like an itemize symbol).
    * Add the folder containing `DelphiReSym.py` via the green ➕ icon.
