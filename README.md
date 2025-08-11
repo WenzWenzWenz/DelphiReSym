@@ -82,7 +82,7 @@ For an in-depth explanation of Delphi's executable format evolution, refer to my
    * On Linux/macOS:
      `./support/pyghidraRun`
 
-2. **Import the binary and open in CodeBrowser** (🐉 button).
+2. **Import the binary you want to analyse and open it in Ghidra's CodeBrowser** (🐉 button).
 
 3. **(Optional)**: Let Ghidra complete its **Auto Analysis**.
    The tool has been tested post-analysis without issues. Executing it Pre-Auto-Analysis, the statistics of _DelphiReSym_ upon successful execution might be incorrectly inflated.
@@ -91,8 +91,8 @@ For an in-depth explanation of Delphi's executable format evolution, refer to my
 
    * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version) or alternatively from [src](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/src/ghidra_scripts/DelphiReSym.py).
    * Go to **Window > Script Manager** (green ▶️ button).
-   * Click the **“Manage Script Directories”** button (the button which looks like an itemize symbol).
-   * Add the folder containing `DelphiReSym.py` via the green ➕ icon.
+   * Click the **"Manage Script Directories"** button (the button which looks like an itemize symbol).
+   * Add the folder containing the downloaded `DelphiReSym.py` via the green ➕ icon.
    * Close the bundle manager.
 
 5. **Run the Tool**:
