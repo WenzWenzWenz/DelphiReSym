@@ -7,7 +7,7 @@
 #@runtime PyGhidra
 
 
-import pyghidra
+import pyghidra  # type: ignore
 import typing
 if typing.TYPE_CHECKING:
    from ghidra.ghidra_builtins import *  # type: ignore
