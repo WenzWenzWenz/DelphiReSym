@@ -56,7 +56,7 @@ Certain Delphi versions use **incompatible metadata formats**, which are not yet
 The visual timeline illustrates the assumed format divergences, under the assumption that Delphi 2009 is not supported. Sections marked **red** and **yellow** in that timeline are unsupported and might have a more fine-grained format change history.
 ![alt text](https://github.com/WenzWenzWenz/ghidra_scripts/blob/main/timeline.png) "Figure 1.: Overview of the various changes in Delphi's file format aligned to its historical timeline.")
 
-For an in-depth explanation of Delphi's executable format evolution, refer to my [Master’s thesis](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/Master_thesis_Introducing_the_Dragon_to_the_Greek.pdf).
+For an in-depth explanation of Delphi's executable format evolution, refer to my [Master’s thesis](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/Academic_work.pdf).
 
 
 
@@ -72,7 +72,7 @@ For an in-depth explanation of Delphi's executable format evolution, refer to my
 
 
 
-## 🛠️ Notes on Install & Usage
+## 🛠️ Usage Guide
 
 1. **Start Ghidra with `pyghidra`**:
    Run Ghidra using the pyghidra-specific launcher from $GHIDRA_HOME:
