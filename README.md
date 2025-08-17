@@ -7,13 +7,51 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 > ⚠️ **Limitations**:
 >
 > * The tool only works on **unpacked** Delphi binaries. Packed binaries will most likely not contain accessible metadata. Use a service like [UnpacMe by OALabs](https://www.unpac.me/) if needed.
-> * Internal Delphi types are currently mapped to generic pointers for readability only.
+> * Internal Delphi types are currently mapped to generic pointers for readability only (see [TODOs](https://github.com/WenzWenzWenz/DelphiReSym/tree/main?tab=readme-ov-file#-todo)).
+
+
+
+## 🛠️ How to run
+
+1. **Start Ghidra with `pyghidra`**:
+   Run Ghidra using the pyghidra-specific launcher from $GHIDRA_HOME:
+
+   * On Windows:
+     `.\support\pyghidraRun.bat`
+   * On Linux/macOS:
+     `./support/pyghidraRun`
+
+2. **Import the binary you want to analyse and open it in Ghidra's CodeBrowser** (🐉 button).
+
+3. **(Optional)**: Let Ghidra complete its **Auto Analysis**.
+   The tool has been tested post-analysis without issues. Executing it Pre-Auto-Analysis, the statistics of _DelphiReSym_ upon successful execution might be incorrectly inflated.
+
+4. **Load the script**:
+
+   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version) or alternatively from [src](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/src/ghidra_scripts/DelphiReSym.py).
+   * Go to **Window > Script Manager** (green ▶️ button).
+   * Click the **"Manage Script Directories"** button (the button which looks like an itemize symbol).
+   * Add the folder containing the downloaded `DelphiReSym.py` via the green ➕ icon.
+   * Close the bundle manager.
+
+5. **Run the tool**:
+
+   * Locate the script "DelphiReSym.py" in the Script Manager list (bundled in the "Delphi" directory).
+   * Click it, then press the **green ▶️ button** ("Run Script").
+   * If the imported binary is supported, a progress bar and status messages will appear in the Ghidra console.
+
+
+
+## 💻 Requirements
+
+* [Ghidra](https://github.com/NationalSecurityAgency/ghidra) (version **11.3 or newer**, for bundled `pyghidra` support)
+* A working **Python 3 interpreter**
+* [`pyghidra`](https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_11.3_build/Ghidra/Configurations/Public_Release/src/global/docs/WhatsNew.md#pyghidra) must be properly configured and used to run the script
 
 
 
 
-
-## ✅ Supported Delphi Versions
+## ✅ Supported Delphi versions
 
 _DelphiReSym_ supports the following Delphi versions, which share compatible metadata formats:
 
@@ -42,7 +80,7 @@ Versions beyond Delphi 12 **may** work, **provided** they retain the same compil
 
 
 
-## 🧪 How to Find Out if My Delphi Executable Version is Supported?
+## 🧪 How to find out if my Delphi executable version is supported?
 
 You can try using the [DIE (Detect It Easy)](https://github.com/horsicq/Detect-It-Easy) tool to get a rough guess of the Delphi version. However, the most reliable approach is to **simply run the tool** – if the version is unsupported, it will fail immediately, before any changes are made to your Ghidra project.
 
@@ -50,7 +88,7 @@ You can try using the [DIE (Detect It Easy)](https://github.com/horsicq/Detect-I
 
 
 
-## ⚙️ Why is My Delphi Version Not Supported?
+## ⚙️ Why is my Delphi version not supported?
 
 Certain Delphi versions use **incompatible metadata formats**, which are not yet supported by this tool.
 The visual timeline illustrates the assumed format divergences, under the assumption that Delphi 2009 is not supported. Sections marked **red** and **yellow** in that timeline are unsupported and might have a more fine-grained format change history.
@@ -61,45 +99,6 @@ For an in-depth explanation of Delphi's executable format evolution, refer to my
 
 
 
-
-## 💻 Requirements
-
-* Ghidra (version **11.3 or newer**, for bundled `pyghidra` support)
-* A working **Python 3 interpreter**
-* [`pyghidra`](https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_11.3_build/Ghidra/Configurations/Public_Release/src/global/docs/WhatsNew.md#pyghidra) must be properly configured and used to run the script
-
-
-
-
-
-## 🛠️ Usage Guide
-
-1. **Start Ghidra with `pyghidra`**:
-   Run Ghidra using the pyghidra-specific launcher from $GHIDRA_HOME:
-
-   * On Windows:
-     `.\support\pyghidraRun.bat`
-   * On Linux/macOS:
-     `./support/pyghidraRun`
-
-2. **Import the binary you want to analyse and open it in Ghidra's CodeBrowser** (🐉 button).
-
-3. **(Optional)**: Let Ghidra complete its **Auto Analysis**.
-   The tool has been tested post-analysis without issues. Executing it Pre-Auto-Analysis, the statistics of _DelphiReSym_ upon successful execution might be incorrectly inflated.
-
-4. **Load the Script**:
-
-   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version) or alternatively from [src](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/src/ghidra_scripts/DelphiReSym.py).
-   * Go to **Window > Script Manager** (green ▶️ button).
-   * Click the **"Manage Script Directories"** button (the button which looks like an itemize symbol).
-   * Add the folder containing the downloaded `DelphiReSym.py` via the green ➕ icon.
-   * Close the bundle manager.
-
-5. **Run the Tool**:
-
-   * Locate the script "DelphiReSym.py" in the Script Manager list (bundled in the "Delphi" directory).
-   * Click it, then press the **green ▶️ button** ("Run Script").
-   * If the imported binary is supported, a progress bar and status messages will appear in the Ghidra console.
 
 
 
