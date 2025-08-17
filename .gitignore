@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# DelphiReSym VSCode structure for Ghidra integration
+src/data/
+src/os/
+src/src/
+src/build.gradle
+src/extension.properties
+src/ghidra_scripts/README.txt
