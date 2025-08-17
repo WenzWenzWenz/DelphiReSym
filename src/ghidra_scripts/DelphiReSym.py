@@ -1,5 +1,5 @@
-# A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct functions. 
-#@author https://github.com/WenzWenzWenz
+# A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct symbols of function signatures. 
+#@author Lukas Wenz - https://github.com/WenzWenzWenz
 #@category Delphi
 #@keybinding 
 #@menupath 
