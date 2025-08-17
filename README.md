@@ -126,6 +126,7 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
 - [ ] Enhance script's general prettiness ✨
 - [ ] Integrate Ghidra headless mode (https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)
 - [ ] Update ">" "<>" RTTI_Class name parsing.
+- [ ] Feature: replace typecasts with actual RTTI datatype structures (credit goes to [@huettenhain](https://github.com/huettenhain)!)
 
 
 
