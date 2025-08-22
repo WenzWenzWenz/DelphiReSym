@@ -1,11 +1,11 @@
 # A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct symbols of
 # function signatures.
-#@author Lukas Wenz - https://github.com/WenzWenzWenz
-#@category Delphi
-#@keybinding
-#@menupath
-#@toolbar
-#@runtime PyGhidra
+# @author Lukas Wenz - https://github.com/WenzWenzWenz
+# @category Delphi
+# @keybinding
+# @menupath
+# @toolbar
+# @runtime PyGhidra
 # -*- coding: utf-8 -*-
 """
 A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct symbols of
@@ -40,7 +40,7 @@ types = set()
 
 if _g := globals():
 
-    def convertToAddress(x: Any) -> Address:
+    def convert_to_addr(x: Any) -> Address:
         return _g["toAddr"](x)
 
     currentProgram = cast(Program, _g["currentProgram"])
@@ -78,7 +78,7 @@ STARTADDR = None
 ENDADDR = None
 
 # TODO: work on: non exhaustive list of non-RTTI dependant types and make this feature toggleable
-dataTypeMapping = {
+data_type_mapping = {
     "Boolean": BooleanDataType,
     "void": VoidDataType,
     "Double": DoubleDataType,
@@ -152,7 +152,7 @@ def warning(msg: str) -> None:
 ##########################################################################
 #    HELPER FUNCTIONS                                                    #
 ##########################################################################
-def readPointer(addr: Address, ptr_size: int) -> Address:
+def read_ptr(addr: Address, ptr_size: int) -> Address:
     """
     Read a pointer of the given size from memory at the specified address.
 
@@ -165,13 +165,13 @@ def readPointer(addr: Address, ptr_size: int) -> Address:
     """
     memory = currentProgram.getMemory()
     return (
-        convertToAddress(memory.getInt(addr))
+        convert_to_addr(memory.getInt(addr))
         if ptr_size == 4
-        else convertToAddress(memory.getLong(addr))
+        else convert_to_addr(memory.getLong(addr))
     )
 
 
-def readPascalString(addr: Address) -> tuple[str, int]:
+def read_pascal_str(addr: Address) -> tuple[str, int]:
     """
     Read a Pascal-String from memory at the specified address.
 
@@ -189,37 +189,37 @@ def readPascalString(addr: Address) -> tuple[str, int]:
     memory = currentProgram.getMemory()
 
     # first byte of a PascalString denotes the number of upcoming chars
-    pascalStringLen = memory.getByte(addr) & 0xFF
+    pascal_str_len = memory.getByte(addr) & 0xFF
 
     # the first char starts at the second byte
-    firstCharAddr = addr.add(1)
+    first_char_addr = addr.add(1)
     # for storing the actual character information
-    pascalString = ""
+    pascal_str = ""
 
     # iterate over the following bytes to fill the PascalString
-    for i in range(pascalStringLen):
-        pascalString += chr(memory.getByte(firstCharAddr.add(i)) & 0xFF)
+    for i in range(pascal_str_len):
+        pascal_str += chr(memory.getByte(first_char_addr.add(i)) & 0xFF)
 
-    return pascalString, pascalStringLen + 1
+    return pascal_str, pascal_str_len + 1
 
 
 @dataclass
 class ArchitectureSpecificSettings:
-    ptrSize: int
-    jumpDist: int
-    textBlockStartAddr: Optional[Address] = None
-    textBlockEndAddr: Optional[Address] = None
+    ptr_size: int
+    jump_dist: int
+    text_block_start_addr: Optional[Address] = None
+    text_block_end_addr: Optional[Address] = None
 
     @property
-    def mdtOffset(self) -> int:
-        return self.ptrSize * 6
+    def mdt_offset(self) -> int:
+        return self.ptr_size * 6
 
     @property
-    def rttiOffset(self) -> int:
-        return self.ptrSize * 4
+    def rtti_offset(self) -> int:
+        return self.ptr_size * 4
 
 
-def getArchitectureSettings() -> ArchitectureSpecificSettings:
+def get_architecture_settings() -> ArchitectureSpecificSettings:
     """
     Return a dictionary with architecture-specific settings, including pointer size, architecture
     specific jump distances to MDT and RTTI_Class.
@@ -229,16 +229,16 @@ def getArchitectureSettings() -> ArchitectureSpecificSettings:
     Returns:
         dict: A dictionary containing architecture settings.
     """
-    ptrSize = currentProgram.getDefaultPointerSize()
+    ptr_size = currentProgram.getDefaultPointerSize()
 
-    if ptrSize == 4:
-        return ArchitectureSpecificSettings(ptrSize=4, jumpDist=88)
-    if ptrSize == 8:
-        return ArchitectureSpecificSettings(ptrSize=8, jumpDist=200)
-    raise RuntimeError(f"Unsupported pointer size: {ptrSize}")
+    if ptr_size == 4:
+        return ArchitectureSpecificSettings(ptr_size=4, jump_dist=88)
+    if ptr_size == 8:
+        return ArchitectureSpecificSettings(ptr_size=8, jump_dist=200)
+    raise RuntimeError(f"Unsupported pointer size: {ptr_size}")
 
 
-def getTextSection(memory: Memory) -> MemoryBlock:
+def get_text_section(memory: Memory) -> MemoryBlock:
     """
     Retrieve the '.text' memory block from the given memory object.
 
@@ -260,9 +260,9 @@ def getTextSection(memory: Memory) -> MemoryBlock:
 ##########################################################################
 #    MAIN LOGIC - VMT RELATED                                            #
 ##########################################################################
-def checkVmtCandidate(
+def check_vmt_candidate(
     candidate: Address,
-    nextStruct: Address,
+    next_struct: Address,
     settings: ArchitectureSpecificSettings,
 ) -> bool:
     """
@@ -284,11 +284,11 @@ def checkVmtCandidate(
     Returns:
         bool: Result of candidate VMT sanity checks.
     """
-    ptrSize = settings.ptrSize
+    ptr_size = settings.ptr_size
     addresses = []
-    addresses.append(nextStruct)
-    mdtAddr = candidate.add(ptrSize * 6)
-    mdt = readPointer(mdtAddr, ptrSize)
+    addresses.append(next_struct)
+    mdt_addr = candidate.add(ptr_size * 6)
+    mdt = read_ptr(mdt_addr, ptr_size)
     if mdt:
         addresses.append(mdt)
         # it has been observed that MDTs are always located at higher addresses than their
@@ -297,20 +297,22 @@ def checkVmtCandidate(
             return False
 
     # sanity check for all 10 mandatory functions at the end of the VMT in a loop
-    for currentFieldNumber in range(11, 22):
+    for current_field_number in range(11, 22):
         # exclude the optional SafeCallExceptionMethod field since it is optional
-        if currentFieldNumber != 14:
-            currentField = candidate.add(ptrSize * currentFieldNumber)
-            addresses.append(readPointer(currentField, ptrSize))
+        if current_field_number != 14:
+            current_field = candidate.add(ptr_size * current_field_number)
+            addresses.append(read_ptr(current_field, ptr_size))
 
     # check if all grabbed non-NULL address are within range of the .text section
     return all(
-        settings.textBlockStartAddr <= addr < settings.textBlockEndAddr.subtract(settings.ptrSize)
+        settings.text_block_start_addr
+        <= addr
+        < settings.text_block_end_addr.subtract(settings.ptr_size)
         for addr in addresses
     )
 
 
-def findVmts(settings: ArchitectureSpecificSettings) -> list:
+def find_vmts(settings: ArchitectureSpecificSettings) -> list:
     """
     Scan the .text section for potential VMT addresses.
 
@@ -329,61 +331,60 @@ def findVmts(settings: ArchitectureSpecificSettings) -> list:
     # if constants are set, this manipulates the analysed address range, instead of analysing the
     # entire .text section
     if STARTADDR:
-        settings.textBlockStartAddr = settings.textBlockStartAddr.getAddress(STARTADDR)
+        settings.text_block_start_addr = settings.text_block_start_addr.getAddress(STARTADDR)
     if ENDADDR:
-        settings.textBlockEndAddr = settings.textBlockEndAddr.getAddress(ENDADDR)
+        settings.text_block_end_addr = settings.text_block_end_addr.getAddress(ENDADDR)
 
-    textBlockSize = settings.textBlockEndAddr.subtract(settings.textBlockStartAddr)
+    text_block_size = settings.text_block_end_addr.subtract(settings.text_block_start_addr)
 
     # empty list to be filled with vmt addresses
-    vmtAddresses = []
-    currentAddr = settings.textBlockStartAddr
+    vmt_addresses = []
+    current_address = settings.text_block_start_addr
 
     # iterate over the .text section, 4 or 8 byte data sliding window approach (architecture
     # dependant)
-    while currentAddr < settings.textBlockEndAddr.subtract(settings.ptrSize - 1):
+    while current_address < settings.text_block_end_addr.subtract(settings.ptr_size - 1):
         check_cancel()
         # read value at current position depending on architecture size
-        currentValue = readPointer(currentAddr, settings.ptrSize)
-        # detail(f"Reading {settings.ptrSize} bytes @ {currentAddr} yielded: {currentValue}")
+        current_val = read_ptr(current_address, settings.ptr_size)
 
         # calculate the displacement between two addresses (this - addr)
-        distance = currentValue.subtract(currentAddr)
+        distance = current_val.subtract(current_address)
         # necessary but not sufficient conditional for identifying VMTs
-        if distance == settings.jumpDist:
+        if distance == settings.jump_dist:
             debug(
-                f"Found forward reference of {settings.jumpDist} bytes -> "
-                f"potential VMT found @ {currentAddr}"
+                f"Found forward reference of {settings.jump_dist} bytes -> "
+                f"potential VMT found @ {current_address}"
             )
 
             # although not quite a sufficient conditional for VMT identification, it still gets rid
             # of a lot of false positives by performing several sanity checks
-            if not checkVmtCandidate(currentAddr, currentValue, settings):
-                debug(f"REJECTED VMT candidate @ {currentAddr}. Didn't pass sanity checks.")
-                currentAddr = currentAddr.add(1)
+            if not check_vmt_candidate(current_address, current_val, settings):
+                debug(f"REJECTED VMT candidate @ {current_address}. Didn't pass sanity checks.")
+                current_address = current_address.add(1)
                 continue
 
             # store the VMT's address for return
-            vmtAddresses.append(currentAddr)
-            debug(f"VMT @ {currentAddr} passed first sanity checks. Adding it to the list of VMTs.")
+            vmt_addresses.append(current_address)
+            debug(f"VMT @ {current_address} passed first sanity checks. Adding it to the list of VMTs.")
 
         # forward step
-        currentAddr = currentAddr.add(1)
+        current_address = current_address.add(1)
 
         # since this function takes the longest amount of time, give an amateur progress bar
         if VERBOSE_INFO:
-            progress = currentAddr.subtract(settings.textBlockStartAddr)
+            progress = current_address.subtract(settings.text_block_start_addr)
             if progress % 100000 == 0:
                 info(
-                    f"[1/8] Processed {round((progress/textBlockSize)*100)}% addresses in .text "
+                    f"[1/8] Processed {round((progress/text_block_size)*100)}% addresses in .text "
                     "section."
                 )
 
-    return vmtAddresses
+    return vmt_addresses
 
 
-def getVmtFieldAddresses(
-    vmtAddresses: list[Address],
+def get_vmt_field_addresses(
+    vmt_addresses: list[Address],
     settings: ArchitectureSpecificSettings,
     offset: int,
     debug_name: str,
@@ -402,28 +403,28 @@ def getVmtFieldAddresses(
     Returns:
         dict[Address, Address]: Mapping from VMT address to the resolved field address.
     """
-    vmtFieldAddresses = {}
+    vmt_field_addresses = {}
 
-    for vmtAddr in vmtAddresses:
+    for vmt_addr in vmt_addresses:
         check_cancel()
         # compute address where the field's pointer lies
-        fieldAddress = vmtAddr.add(offset)
-        debug(f"Pointer to {debug_name} @ {fieldAddress}")
+        field_addr = vmt_addr.add(offset)
+        debug(f"Pointer to {debug_name} @ {field_addr}")
         try:
-            fieldValue = readPointer(fieldAddress, settings.ptrSize)
+            field_val = read_ptr(field_addr, settings.ptr_size)
         except MemoryAccessException:
-            warning(f"Could not read bytes @ {fieldAddress}. Skipping.")
+            warning(f"Could not read bytes @ {field_addr}. Skipping.")
             continue
-        vmtFieldAddresses[vmtAddr] = fieldValue
+        vmt_field_addresses[vmt_addr] = field_val
 
-    return vmtFieldAddresses
+    return vmt_field_addresses
 
 
 ##########################################################################
 #    MAIN LOGIC - MDT RELATED                                            #
 ##########################################################################
-def traverseMdtTopLevel(
-    vmtMdtRelations: dict[Address, Address],
+def traverse_mdt_top_level(
+    vmt_mdt_relations: dict[Address, Address],
     settings: ArchitectureSpecificSettings,
 ) -> dict:
     """
@@ -444,49 +445,56 @@ def traverseMdtTopLevel(
     # regrab memory interface
     memory = currentProgram.getMemory()
 
-    vmtMdtTopInfo = {}
+    vmt_mdt_top_level_info = {}
 
-    for vmtAddr, mdtAddr in vmtMdtRelations.items():
+    for vmt_addr, mdt_addr in vmt_mdt_relations.items():
         check_cancel()
         # store address information for this MDT traversal
-        vmtMdtTopInfo[vmtAddr] = {"mdt": mdtAddr, "methodEntries": []}
+        vmt_mdt_top_level_info[vmt_addr] = {"mdt": mdt_addr, "methodEntries": []}
 
         # navigate to the NumOfMethodEntryRefs field
-        numOfMethodEntryRefsAddr = mdtAddr.add(2)
+        num_of_method_entry_ref_structs_field = mdt_addr.add(2)
         # grab its 2B long content (architecture-independant)
-        numOfMethodEntryRefs = memory.getShort(numOfMethodEntryRefsAddr)
-        debug(f"NumOfMethodEntryRefs: {numOfMethodEntryRefs} for MDT @ {mdtAddr}")
+        num_of_method_entry_ref_structs = memory.getShort(num_of_method_entry_ref_structs_field)
+        debug(
+            f"num_of_method_entry_ref_structs: {num_of_method_entry_ref_structs} for MDT @ "
+            f"{mdt_addr}"
+        )
 
-        if numOfMethodEntryRefs == 0:
+        if num_of_method_entry_ref_structs == 0:
             continue
 
         # go to start of MethodEntryRef concatenation
-        methodEntryRefStartAddr = numOfMethodEntryRefsAddr.add(2)
+        method_entry_refs_start_addr = num_of_method_entry_ref_structs_field.add(2)
 
         # get all starting addresses of the MDT's MethodEntries (`AddressOfMethodEntry`) and add
         # them to a list
-        methodEntryAddresses = []
-        for i in range(numOfMethodEntryRefs):
+        method_entry_addresses = []
+        for i in range(num_of_method_entry_ref_structs):
             check_cancel()
-            methodEntryRefAddr = methodEntryRefStartAddr.add(i * (settings.ptrSize + 4))
+            current_method_entry_ref_field = method_entry_refs_start_addr.add(
+                i * (settings.ptr_size + 4)
+            )
             try:
-                methodEntryAddr = readPointer(methodEntryRefAddr, settings.ptrSize)
+                current_method_entry_addr = read_ptr(
+                    current_method_entry_ref_field, settings.ptr_size
+                )
             except MemoryAccessException:
-                warning(f"Could not read bytes @ {methodEntryRefAddr}. Skipping.")
+                warning(f"Could not read bytes @ {current_method_entry_ref_field}. Skipping.")
                 continue
 
-            methodEntryAddresses.append(methodEntryAddr)
+            method_entry_addresses.append(current_method_entry_addr)
 
         # add address information of found methodEntries to correlated MDT / VMT information
-        vmtMdtTopInfo[vmtAddr]["methodEntries"].extend(methodEntryAddresses)
+        vmt_mdt_top_level_info[vmt_addr]["methodEntries"].extend(method_entry_addresses)
 
-    debug(f"Dictionary information after traverseMdtTopLevel(): {vmtMdtTopInfo}")
-    return vmtMdtTopInfo
+    debug(f"Dictionary information after traverseMdtTopLevel(): {vmt_mdt_top_level_info}")
+    return vmt_mdt_top_level_info
 
 
-def traverseParamEntries(
-    firstParamEntryAddr: Address,
-    numOfParamEntries: int,
+def traverse_param_entries(
+    first_param_entry_addr: Address,
+    num_of_param_entries: int,
     settings: ArchitectureSpecificSettings,
 ):
     """
@@ -506,38 +514,38 @@ def traverseParamEntries(
         dict: Mapping from each ParamEntry's address to a dictionary containing the parameter's RTTI
             address, name, and namespace.
     """
-    paramEntriesInfo = {}
-    currentAddr = firstParamEntryAddr
-    for _ in range(numOfParamEntries):
+    param_entries_info = {}
+    current_addr = first_param_entry_addr
+    for _ in range(num_of_param_entries):
         check_cancel()
         # cache addr at which each ParamEntry starts (as a key for storing information below)
-        paramEntryAddr = currentAddr
+        param_entry_addr = current_addr
         # get addr of RTTI object (indirect reference hence dereference)
         try:
-            rtti = readPointer(readPointer(currentAddr, settings.ptrSize), settings.ptrSize)
-            rttiNamespace = traverseRttiObject(rtti, settings)
+            rtti = read_ptr(read_ptr(current_addr, settings.ptr_size), settings.ptr_size)
+            rtti_namespace = traverse_rtti_object(rtti, settings)
         except Exception:
             rtti = None
-            rttiNamespace = None
+            rtti_namespace = None
 
         # go to NameOfRtti field
-        currentAddr = currentAddr.add(settings.ptrSize + 2)
+        current_addr = current_addr.add(settings.ptr_size + 2)
         # grab name and size information
-        paramName, strLen = readPascalString(currentAddr)
+        param_name, str_len = read_pascal_str(current_addr)
         # go to AddrOfRtti field of next ParamEntry (remark: 3 bytes of additional data for
         # numOfParamEntries > 1)
-        currentAddr = currentAddr.add(strLen + 3)
-        paramEntriesInfo[paramEntryAddr] = {
+        current_addr = current_addr.add(str_len + 3)
+        param_entries_info[param_entry_addr] = {
             "AddrOfRtti": rtti,
-            "ParamName": paramName,
-            "rttiNamespace": rttiNamespace,
+            "ParamName": param_name,
+            "rttiNamespace": rtti_namespace,
         }
 
-    return paramEntriesInfo
+    return param_entries_info
 
 
-def traverseMethodEntries(
-    vmtMdtTopInfo: dict,
+def traverse_method_entries(
+    vmt_mdt_top_info: dict,
     settings: ArchitectureSpecificSettings,
 ) -> dict:
     """
@@ -552,107 +560,109 @@ def traverseMethodEntries(
     memory = currentProgram.getMemory()
 
     # the zero-address for reusability
-    allZeroAddress = convertToAddress("0x0")
+    all_zero_addr = convert_to_addr("0x0")
 
     # iterate over all MethodEntries of each VMT's MDT; by creating a new list, we can change the
     # size of the underlying dictionary during runtime
-    for vmt in list(vmtMdtTopInfo.keys()):
+    for vmt in list(vmt_mdt_top_info.keys()):
         # store information about relevant fields for each MethodEntry of an MDT
-        methodEntriesInfo = {}
+        method_entries_info = {}
 
-        for methodEntry in vmtMdtTopInfo[vmt]["methodEntries"]:
+        for method_entry in vmt_mdt_top_info[vmt]["methodEntries"]:
             check_cancel()
             # dictionary to hold relevant information for a single MethodEntry
-            methodEntryInfo = {}
+            method_entry_info = {}
 
             # grab entry point of the MethodEntry's function definition
             try:
-                functionDefinitionAddr = methodEntry.add(2)
+                function_def_addr_field = method_entry.add(2)
             except AddressOutOfBoundsException:
                 # this error can happen when a huge concatenation of addresses structure is falsely
                 # detected as a VMT, hence, ignore its method entries
                 break
             try:
-                methodEntryInfo["functionEntryPoint"] = readPointer(
-                    functionDefinitionAddr, settings.ptrSize
+                method_entry_info["functionEntryPoint"] = read_ptr(
+                    function_def_addr_field, settings.ptr_size
                 )
             except MemoryAccessException:
                 warning(
-                    f"Could not read bytes @ {functionDefinitionAddr}. Skipping methodEntry: "
-                    f"{methodEntry}."
+                    f"Could not read bytes @ {function_def_addr_field}. Skipping methodEntry: "
+                    f"{method_entry}."
                 )
                 continue
 
             # grab the corresponding function name
-            nameOfFunctionAddr = functionDefinitionAddr.add(settings.ptrSize)
+            name_of_function_addr = function_def_addr_field.add(settings.ptr_size)
             try:
-                methodEntryInfo["nameOfFunction"], strLen = readPascalString(nameOfFunctionAddr)
+                method_entry_info["nameOfFunction"], strLen = read_pascal_str(name_of_function_addr)
             except MemoryAccessException:
                 warning(
-                    f"Couldn't grab nameOfFunctionAddr: {nameOfFunctionAddr}. Skipping "
-                    f"methodEntry: {methodEntry}."
+                    f"Couldn't grab nameOfFunctionAddr: {name_of_function_addr}. Skipping "
+                    f"methodEntry: {method_entry}."
                 )
                 continue
 
             # grab information about return type's RTTI class
-            returnTypeAddress = nameOfFunctionAddr.add(strLen + 2)
+            ret_type_addr_field = name_of_function_addr.add(strLen + 2)
             try:
-                dereferencedReturnTypeAddress = readPointer(returnTypeAddress, settings.ptrSize)
+                dereferenced_ret_type_addr = read_ptr(ret_type_addr_field, settings.ptr_size)
                 # if all zero'd, void is the return type
-                if dereferencedReturnTypeAddress == allZeroAddress:
-                    methodEntryInfo["returnTypeRttiAt"] = "n.a."
-                    methodEntryInfo["returnTypeStr"] = "void"
-                    detail(f"void return type applied for returnTypeAddress: {returnTypeAddress}")
+                if dereferenced_ret_type_addr == all_zero_addr:
+                    method_entry_info["returnTypeRttiAt"] = "n.a."
+                    method_entry_info["returnTypeStr"] = "void"
+                    detail(f"void return type applied for returnTypeAddress: {ret_type_addr_field}")
                 else:
-                    methodEntryInfo["returnTypeRttiAt"] = dereferencedReturnTypeAddress
-                    doubleDereferencedReturnTypeAddress = readPointer(
-                        dereferencedReturnTypeAddress, settings.ptrSize
+                    method_entry_info["returnTypeRttiAt"] = dereferenced_ret_type_addr
+                    doubly_dereferenced_ret_type_addr = read_ptr(
+                        dereferenced_ret_type_addr, settings.ptr_size
                     )
-                    methodEntryInfo["returnTypeStr"] = traverseRttiObject(
-                        doubleDereferencedReturnTypeAddress, settings
+                    method_entry_info["returnTypeStr"] = traverse_rtti_object(
+                        doubly_dereferenced_ret_type_addr, settings
                     )
             except MemoryAccessException:
-                warning(f"Could not read bytes @ {returnTypeAddress}. Skipping.")
+                warning(f"Could not read bytes @ {ret_type_addr_field}. Skipping.")
                 continue
 
             # get NumOfParamEntries
-            numOfParamEntriesAddr = returnTypeAddress.add(settings.ptrSize + 2)
-            numOfParamEntries = memory.getByte(numOfParamEntriesAddr) & 0xFF
+            num_of_param_entries_field = ret_type_addr_field.add(settings.ptr_size + 2)
+            num_of_param_entries = memory.getByte(num_of_param_entries_field) & 0xFF
 
             # go to first ParamEntry substructure
-            firstParamEntryAddr = numOfParamEntriesAddr.add(2)
+            first_param_entry_field = num_of_param_entries_field.add(2)
 
             # sanity check for the ParamEntries: check if potential ParamEntries are within .text
             # section
             if not (
-                settings.textBlockStartAddr <= firstParamEntryAddr <= settings.textBlockEndAddr
+                settings.text_block_start_addr
+                <= first_param_entry_field
+                <= settings.text_block_end_addr
             ):
                 # addresses outside the .text section mean false positive ParamEntries, hence remove
                 # them
-                del vmtMdtTopInfo[vmt]
+                del vmt_mdt_top_info[vmt]
                 break
 
             # get information about position and names of the specific MethodEntry's parameters
-            methodEntryInfo["paramEntries"] = traverseParamEntries(
-                firstParamEntryAddr, numOfParamEntries, settings
+            method_entry_info["paramEntries"] = traverse_param_entries(
+                first_param_entry_field, num_of_param_entries, settings
             )
 
             # store information to the dictionary holding data for all MethodEntries of an MDT
-            methodEntriesInfo[methodEntry] = methodEntryInfo
+            method_entries_info[method_entry] = method_entry_info
 
         # the else clause only triggers, if the inner loops break didn't trigger
         else:
             # store information to the dictionary holding all data
-            vmtMdtTopInfo[vmt]["methodEntriesInfo"] = methodEntriesInfo
+            vmt_mdt_top_info[vmt]["methodEntriesInfo"] = method_entries_info
 
-    debug(f"Dictionary information after traverseMethodEntries(): {vmtMdtTopInfo}")
-    return vmtMdtTopInfo
+    debug(f"Dictionary information after traverseMethodEntries(): {vmt_mdt_top_info}")
+    return vmt_mdt_top_info
 
 
 ##########################################################################
 #    MAIN LOGIC - RTTI_CLASS RELATED                                     #
 ##########################################################################
-def traverseRttiObject(addr: Address, settings: dict) -> str | None:
+def traverse_rtti_object(addr: Address, settings: dict) -> str | None:
     """
     Traverse a Delphi RTTI object and extract string information based on its magic byte.
     If the RTTI object is an RTTI_Class (0x07), its object name and namespace get returned, i.e.
@@ -671,35 +681,35 @@ def traverseRttiObject(addr: Address, settings: dict) -> str | None:
     """
     # regrab memory interface
     memory = currentProgram.getMemory()
-    magicByte = memory.getByte(addr) & 0xFF
+    magic_byte = memory.getByte(addr) & 0xFF
 
-    if magicByte > 0x15:
+    if magic_byte > 0x15:
         warning(
             f"Tried to traverse data @ {addr}, but it's not an RTTI object! Skipping traversal."
         )
         return None
 
     # go to RttiObjectName field
-    rttiObjectNameAddr = addr.add(1)
+    rtti_object_name_field = addr.add(1)
     # read Pascal String to get name of the RTTI object
-    rttiObjectName, strLen = readPascalString(rttiObjectNameAddr)
+    rtti_object_name, str_len = read_pascal_str(rtti_object_name_field)
 
     # if the traversed object is not of type RTTI_Class, only return its name as information
-    if magicByte != 0x07:
-        return rttiObjectName
+    if magic_byte != 0x07:
+        return rtti_object_name
 
     # go to RttiNamespace field
-    rttiNamespaceAddr = rttiObjectNameAddr.add(strLen + settings.ptrSize * 2 + 2)
+    rtti_namespace_field = rtti_object_name_field.add(str_len + settings.ptr_size * 2 + 2)
     # read Pascal String to get the namespace of the RTTI_Class
-    rttiNamespace, _ = readPascalString(rttiNamespaceAddr)
+    rtti_namespace, _ = read_pascal_str(rtti_namespace_field)
 
     # construct namespace from the PoV of a function in Delphi style (not yet C++!)
-    namespace = rttiNamespace + "." + rttiObjectName
+    namespace = rtti_namespace + "." + rtti_object_name
 
     return namespace
 
 
-def addNamespaceInformation(vmtRttiRelations: dict, symbolInfo: dict, settings: dict) -> dict:
+def add_namespace_information(vmt_rtti_relations: dict, symbol_info: dict, settings: dict) -> dict:
     """
     Augment symbol information with the namespace string derived via RTTI traversal. It ensures
     consistency with any VMTs previously filtered out.
@@ -712,25 +722,25 @@ def addNamespaceInformation(vmtRttiRelations: dict, symbolInfo: dict, settings: 
     Returns:
         dict: Updated symbolInfo dictionary with added `namespace` fields.
     """
-    for vmt, rtti in vmtRttiRelations.items():
+    for vmt, rtti in vmt_rtti_relations.items():
         check_cancel()
         # if during traverseMethodEntries() a vmt had been removed, take this change into effect
         # here as well
-        if vmt not in symbolInfo:
+        if vmt not in symbol_info:
             continue
 
-        namespace = traverseRttiObject(rtti, settings)
+        namespace = traverse_rtti_object(rtti, settings)
         debug(f"Mapping namespace information {namespace} to vmt @ {vmt}")
-        symbolInfo[vmt]["namespace"] = namespace
+        symbol_info[vmt]["namespace"] = namespace
 
-    debug(f"Final dictionary information: {symbolInfo}")
-    return symbolInfo
+    debug(f"Final dictionary information: {symbol_info}")
+    return symbol_info
 
 
 ##########################################################################
 #    MAIN LOGIC - TRANSFORMATION FUNCTIONS                               #
 ##########################################################################
-def prepareNamespace(namespaceStr: str) -> Namespace:
+def prepare_namespace(namespace_str: str) -> Namespace:
     """
     Create or retrieve a nested namespace hierarchy in Ghidra's symbol table from a namespace
     string.
@@ -748,30 +758,30 @@ def prepareNamespace(namespaceStr: str) -> Namespace:
             deepest namespace level.
     """
     # grab ghidra's symbol table
-    symbolTable = currentProgram.getSymbolTable()
+    symbol_table = currentProgram.getSymbolTable()
     # split the namespace string at the first '.' character, returning a list of its parts
-    namespaceParts = namespaceStr.split(".")
+    namespace_parts = namespace_str.split(".")
 
     # start from the root namespace and iteratively grab or create its children
-    parentNamespace = currentProgram.getGlobalNamespace()
-    for part in namespaceParts:
+    parent_namespace = currentProgram.getGlobalNamespace()
+    for part in namespace_parts:
         check_cancel()
         # look for an existing namespace with this name under the current parent or create it if
         # needed
         # remark: USER_DEFINED makes sure that later on, the information will not be overwritten by
         # ghidra
         try:
-            parentNamespace = symbolTable.getOrCreateNameSpace(
-                parentNamespace, part, SourceType.USER_DEFINED
+            parent_namespace = symbol_table.getOrCreateNameSpace(
+                parent_namespace, part, SourceType.USER_DEFINED
             )
         except InvalidInputException:
             return None
 
     # return the final namespace object (e.g., TApplication)
-    return parentNamespace
+    return parent_namespace
 
 
-def prepareDataType(typeString: str) -> DataType:
+def prepare_data_type(type_string: str) -> DataType:
     """
     Returns the datatype concerning a string argument - either by mapping to a ghidra built-in
     datatype or by building the namespace of the RTTI type.
@@ -782,44 +792,44 @@ def prepareDataType(typeString: str) -> DataType:
     Returns:
         DataType: The datatype object, either built by a constructor or a ghidra built-in datatype.
     """
-    dataTypes = currentProgram.getDataTypeManager()
+    data_types = currentProgram.getDataTypeManager()
 
     # the following three lines are currently used for debugging purposes only
-    global dataTypeMapping
-    if "." not in typeString:
-        types.add(typeString)
+    global data_type_mapping
+    if "." not in type_string:
+        types.add(type_string)
 
-    if typeString in dataTypeMapping:
+    if type_string in data_type_mapping:
         # return mapped ghidra built-in datatype if it's a simple datatype
-        finalDataType = dataTypeMapping[typeString]()
+        final_data_type = data_type_mapping[type_string]()
     else:
         # define the class name and namespace
-        paramNamespace = prepareNamespace(typeString)
-        paramClassName = typeString.split(".")[-1].rstrip(">")
+        param_namespace = prepare_namespace(type_string)
+        param_class_name = type_string.split(".")[-1].rstrip(">")
 
         # create a class in the given namespace via the light-weight FlatProgramAPI function
         try:
-            createClass(paramNamespace, paramClassName)
+            createClass(param_namespace, param_class_name)
         except DuplicateNameException:
             pass
 
         # create a categorypath and the actual datatype
-        categoryPath = CategoryPath(
-            "/" + paramNamespace.getParentNamespace().getName(True).replace("::", "/")
+        category_path = CategoryPath(
+            "/" + param_namespace.getParentNamespace().getName(True).replace("::", "/")
         )  # → /Vcl/Forms
-        dataType = StructureDataType(categoryPath, paramClassName, 0)
+        data_type = StructureDataType(category_path, param_class_name, 0)
 
         # register the datatype with the DataTypeManager
-        registeredDataType = dataTypes.addDataType(dataType, None)
+        registered_data_type = data_types.addDataType(data_type, None)
 
         # create a pointer to the class (Delphi typically passes/returns class instances as
         # pointers) and return it
-        finalDataType = PointerDataType(registeredDataType)
+        final_data_type = PointerDataType(registered_data_type)
 
-    return finalDataType
+    return final_data_type
 
 
-def applySymbols(allSymbolInfo: dict, settings: dict) -> dict:
+def apply_symbols(all_symbol_info: dict) -> dict:
     """
     Handles the actual symbol name recovering, given all previously gathered information.
 
@@ -828,62 +838,60 @@ def applySymbols(allSymbolInfo: dict, settings: dict) -> dict:
 
     Parameters:
         allSymbolInfo (dict): Dictionary holding previously gathered metadata.
-        settings (dict): Architecture-specific settings including pointer size, jump distance, and
-            start/end addresses of the .text block.
 
     Returns:
         dict: Counts the numbers of VMTs, function names, and FQNs which have been fully recovered.
     """
     # grab necessary interfaces
-    functionManager = currentProgram.getFunctionManager()
+    function_manager = currentProgram.getFunctionManager()
 
     # count how many VMT/functions have been fully recovered (evaluation information only)
-    applyCount = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "paramSet": 0}
+    apply_count = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "paramSet": 0}
 
-    for vmt, topLevelValue in allSymbolInfo.items():
+    for vmt, top_level_val in all_symbol_info.items():
         detail(f"[7/8] Currently proceessing symbol information for VMT @ {vmt} ...")
-        applyCount["vmt"] += 1
+        apply_count["vmt"] += 1
 
         # get namespace information from ghidra's symbol table or create it if required
-        if "namespace" not in topLevelValue.keys():
+        if "namespace" not in top_level_val.keys():
             continue
-        nameSpaceStr = topLevelValue["namespace"]
-        if nameSpaceStr is None:
+        namespace_str = top_level_val["namespace"]
+        if namespace_str is None:
             continue
-        namespace = prepareNamespace(nameSpaceStr)
+        namespace = prepare_namespace(namespace_str)
 
-        for secondLevelValue in topLevelValue["methodEntriesInfo"].values():
+        for second_level_val in top_level_val["methodEntriesInfo"].values():
             check_cancel()
             # grab all pieces of information from all MDT levels and recover symbols accordingly
-            functionEntryPoint = secondLevelValue["functionEntryPoint"]
-            functionName = secondLevelValue["nameOfFunction"]
-            returnTypeStr = secondLevelValue["returnTypeStr"]
-            paramTuples = []
-            for paramEntry, thirdLevelValue in secondLevelValue["paramEntries"].items():
+            function_entry_point = second_level_val["functionEntryPoint"]
+            function_name = second_level_val["nameOfFunction"]
+            ret_type_str = second_level_val["returnTypeStr"]
+            param_tuples = []
+            for _, third_level_value in second_level_val["paramEntries"].items():
                 if (
-                    thirdLevelValue["rttiNamespace"] is None
-                    or thirdLevelValue["ParamName"] == "Self"
+                    third_level_value["rttiNamespace"] is None
+                    or third_level_value["ParamName"] == "Self"
                 ):
-                    paramTuples.append((thirdLevelValue["ParamName"], nameSpaceStr))
+                    param_tuples.append((third_level_value["ParamName"], namespace_str))
                     continue
-                paramTuples.append((thirdLevelValue["ParamName"], thirdLevelValue["rttiNamespace"]))
+                param_tuples.append((third_level_value["ParamName"], third_level_value["rttiNamespace"]))
 
             # -------------------------- APPLY FUNCTION NAMES ----------------------------------- #
             # start the actual symbol name recovery transformation with grabbing the function to
             # edit
-            function = functionManager.getFunctionAt(functionEntryPoint)
+            function = function_manager.getFunctionAt(function_entry_point)
             # if ghidra doesn't recognize this address already as a function
             if not function:
                 # creating via the light-weight FlatProgramAPI function sets a name automatically
-                function = createFunction(functionEntryPoint, functionName)
+                function = createFunction(function_entry_point, function_name)
                 # function could not be created for some reason, hence skip its symbol recovery
                 if function is None:
                     continue
             else:
                 # if function is already been known to ghidra, replace its name
-                function.setName(functionName, SourceType.USER_DEFINED)
+                function.setName(function_name, SourceType.USER_DEFINED)
 
-            applyCount["function"] += 1
+            apply_count["function"] += 1
             # ----------------------------------------------------------------------------------- #
 
             # -------------------------- APPLY NAMESPACES --------------------------------------- #
@@ -891,41 +899,42 @@ def applySymbols(allSymbolInfo: dict, settings: dict) -> dict:
                 try:
                     function.setParentNamespace(namespace)
                     detail(
-                        f"Successfully applied FQN {namespace}::{functionName} function @ "
-                        f"{functionEntryPoint}."
+                        f"Successfully applied FQN {namespace}::{function_name} function @ "
+                        f"{function_entry_point}."
                     )
-                    applyCount["fqn"] += 1
+                    apply_count["fqn"] += 1
                 except (
                     Exception
                 ) as e:  # java.lang.IllegalArgumentException: namespace is from different program 
-                         # instance: System::TMarshal
+                    # instance: System::TMarshal
                     warning(e)
                     warning(namespace)
                     pass
             # ----------------------------------------------------------------------------------- #
 
             # -------------------------- APPLY RETURN TYPES ------------------------------------- #
-            if returnTypeStr is not None:
+            if ret_type_str is not None:
                 # retrieve DataType object for return type application
-                finalDataType = prepareDataType(returnTypeStr)
+                final_data_type = prepare_data_type(ret_type_str)
 
                 # replace return type
-                function.setReturnType(finalDataType, SourceType.USER_DEFINED)
+                function.setReturnType(final_data_type, SourceType.USER_DEFINED)
 
                 detail(
-                    f"Successfully applied return type {returnTypeStr} to function @ {functionEntryPoint}."
+                    f"Successfully applied return type {ret_type_str} to function "
+                    f"@ {function_entry_point}."
                 )
-                applyCount["return"] += 1
+                apply_count["return"] += 1
             # ----------------------------------------------------------------------------------- #
 
             # -------------------------- APPLY PARAM TUPLES ------------------------------------- #
             params = []
-            for paramName, rttiName in paramTuples:
+            for param_name, rtti_name in param_tuples:
                 # retrieve DataType object for parameter application preparation
-                finalDataType = prepareDataType(rttiName)
+                final_data_type = prepare_data_type(rtti_name)
 
                 # Create parameters using ParameterImpl(name, dataType, program) and add them to
-                param = ParameterImpl(paramName, finalDataType, currentProgram)
+                param = ParameterImpl(param_name, final_data_type, currentProgram)
                 params.append(param)
 
             # replace parameters
@@ -940,10 +949,10 @@ def applySymbols(allSymbolInfo: dict, settings: dict) -> dict:
             except InvalidInputException:
                 continue
 
-            applyCount["paramSet"] += 1
+            apply_count["paramSet"] += 1
             # ----------------------------------------------------------------------------------- #
 
-    return applyCount
+    return apply_count
 
 
 ##########################################################################
@@ -955,82 +964,83 @@ def main() -> None:
     executable's VMTs and MDTs within Ghidra.
     """
     # retrieve original function count at program start
-    originalFunctionCount = currentProgram.getFunctionManager().getFunctionCount()
-
-    # for statistical logging in the end
-    totalFunctions = currentProgram.getFunctionManager().getFunctionCount()
+    original_function_count = currentProgram.getFunctionManager().getFunctionCount()
 
     # grab relevant numbers which depend on the architecture of the executable
-    settings = getArchitectureSettings()
+    settings = get_architecture_settings()
 
     # get memory interface of executable (beware: "memory changes should generally be completed
     # prior to analysis.")
     memory = currentProgram.getMemory()
-    textSection = getTextSection(memory)
-    settings.textBlockStartAddr = textSection.getStart()
-    settings.textBlockEndAddr = textSection.getEnd()
+    text_section = get_text_section(memory)
+    settings.text_block_start_addr = text_section.getStart()
+    settings.text_block_end_addr = text_section.getEnd()
 
     # print more general information
-    print(f"|> Size of .text section: {textSection.getSizeAsBigInteger()}")
+    print(f"|> Size of .text section: {text_section.getSizeAsBigInteger()}")
 
     info("[1/8] Starting to scan for candidate VMTs & performing sanity checks...")
-    vmtAddresses = findVmts(settings)
+    vmt_addresses = find_vmts(settings)
 
     info("[2/8] Grabbing the MDT of every found VMT...")
-    vmtMdtRelations = getVmtFieldAddresses(vmtAddresses, settings, settings.mdtOffset, "MDT")
+    vmt_mdt_relations = get_vmt_field_addresses(vmt_addresses, settings, settings.mdt_offset, "MDT")
 
     info("[3/8] Grabbing the RTTI_Class of every found VMT...")
-    vmtRttiRelations = getVmtFieldAddresses(vmtAddresses, settings, settings.rttiOffset, "VmtRtti")
+    vmt_rtti_relations = get_vmt_field_addresses(
+        vmt_addresses, settings, settings.rtti_offset, "VmtRtti"
+    )
 
     # find all starting addresses of all MethodEntry substructures of every MDT
     # the result is structured as follows:
     # {<vmtAddr>: {"mdt": <mdtAddress>, "methodEntries":[<methodEntry1Addr>, <methodEntry2Addr>,
     # ...]}}
     info("[4/8] Grabbing the MethodEntries of every found MDT...")
-    vmtMdtTopInfo = traverseMdtTopLevel(vmtMdtRelations, settings)
+    vmt_mdt_top_level_info = traverse_mdt_top_level(vmt_mdt_relations, settings)
 
     # entlang der MDT Struktur entlang hangeln, um relevante Daten zu erhalten.
     info("[5/8] Extracting information of all MethodEntries of every found MDT...")
-    vmtMdtSymbolInfo = traverseMethodEntries(vmtMdtTopInfo, settings)
+    vmt_mdt_symbol_info = traverse_method_entries(vmt_mdt_top_level_info, settings)
 
     # complete symbol recovery information by calling traverseRttiClass(addr, settings) for all VMTs
     info("[6/8] Extracting the RTTI namespaces for every VMT/MDT...")
-    allSymbolInfo = addNamespaceInformation(vmtRttiRelations, vmtMdtSymbolInfo, settings)
+    all_symbol_info = add_namespace_information(vmt_rtti_relations, vmt_mdt_symbol_info, settings)
 
     # apply symbol name recovery
     info("[7/8] Reconstructing all symbol names...")
-    recCounts = applySymbols(allSymbolInfo, settings)
+    recovery_counts = apply_symbols(all_symbol_info)
 
     # print final statistics
-    totalFunctions = currentProgram.getFunctionManager().getFunctionCount()
-    info(f"[8/8] Statistics: Pre-execution number of functions: {originalFunctionCount}")
-    info(f"[8/8] Statistics: Post-execution number of functions: {totalFunctions}")
-    info(f"[8/8] Statistics: Number of VMTs found: {len(vmtAddresses)}")
+    total_function_count = currentProgram.getFunctionManager().getFunctionCount()
+    info(f"[8/8] Statistics: Pre-execution number of functions: {original_function_count}")
+    info(f"[8/8] Statistics: Post-execution number of functions: {total_function_count}")
+    info(f"[8/8] Statistics: Number of VMTs found: {len(vmt_addresses)}")
     info(
-        f"[8/8] Statistics: Number of symbol recovered VMTs: {recCounts['vmt']}, yielding "
-        f"{recCounts['vmt']/len(vmtAddresses)*100:.2f}% of all found VMTs."
+        f"[8/8] Statistics: Number of symbol recovered VMTs: {recovery_counts['vmt']}, yielding "
+        f"{recovery_counts['vmt']/len(vmt_addresses)*100:.2f}% of all found VMTs."
     )
     info(
-        f"[8/8] Statistics: Number of symbol recovered functions: {recCounts['function']}, "
-        f"yielding {recCounts['function']/totalFunctions*100:.2f}% of all functions; or {recCounts['function']/originalFunctionCount*100:.2f}% when using pre-execution function count."
+        f"[8/8] Statistics: Number of symbol recovered functions: {recovery_counts['function']}, "
+        f"yielding {recovery_counts['function']/total_function_count*100:.2f}% of all functions; "
+        f"or {recovery_counts['function']/original_function_count*100:.2f}% when using "
+        "pre-execution function count."
     )
     info(
-        f"[8/8] Statistics: Number of applied FQNs: {recCounts['fqn']}, yielding "
-        f"{recCounts['fqn']/totalFunctions*100:.2f}% of all functions; or "
-        f"{recCounts['fqn']/originalFunctionCount*100:.2f}% when using pre-execution function"
-        "count."
+        f"[8/8] Statistics: Number of applied FQNs: {recovery_counts['fqn']}, yielding "
+        f"{recovery_counts['fqn']/total_function_count*100:.2f}% of all functions; or "
+        f"{recovery_counts['fqn']/original_function_count*100:.2f}% when using pre-execution "
+        "function count."
     )
     info(
-        f"[8/8] Statistics: Number of applied return types: {recCounts['return']}, yielding "
-        f"{recCounts['return']/totalFunctions*100:.2f}% of all functions; or "
-        f"{recCounts['return']/originalFunctionCount*100:.2f}% when using pre-execution function "
-        "count."
+        f"[8/8] Statistics: Number of applied return types: {recovery_counts['return']}, yielding "
+        f"{recovery_counts['return']/total_function_count*100:.2f}% of all functions; or "
+        f"{recovery_counts['return']/original_function_count*100:.2f}% when using pre-execution "
+        "function count."
     )
     info(
-        f"[8/8] Statistics: Number of applied parameter sets: {recCounts['paramSet']}, yielding "
-        f"{recCounts['paramSet']/totalFunctions*100:.2f}% of all functions; or "
-        f"{recCounts['paramSet']/originalFunctionCount*100:.2f}% when using pre-execution function"
-        "count."
+        f"[8/8] Statistics: Number of applied parameter sets: {recovery_counts['paramSet']}, yielding "
+        f"{recovery_counts['paramSet']/total_function_count*100:.2f}% of all functions; or "
+        f"{recovery_counts['paramSet']/original_function_count*100:.2f}% when using pre-execution "
+        "function count."
     )
     info("[8/8] Finished.")
 
