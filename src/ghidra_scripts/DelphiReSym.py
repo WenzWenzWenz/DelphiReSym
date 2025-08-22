@@ -435,7 +435,7 @@ def traverse_mdt_top_level(
 
     Reads the number of method entry references from each MDT and resolves the addresses of the
     corresponding method entries. The result includes a mapping from VMTs to their MDT and a list of
-      associated method entry addresses.
+    associated method entry addresses.
 
     Parameters:
         vmtMdtRelations (dict): Mapping of VMT addresses to their MDT addresses.
