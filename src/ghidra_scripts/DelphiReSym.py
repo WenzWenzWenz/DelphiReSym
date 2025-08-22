@@ -940,6 +940,9 @@ def main() -> None:
     global types
     debug(types)
 
-if __name__ == "__main__":
-    main()
 
+if pyghidra.started():
+    try:
+        main()
+    except MonitorCancel:
+        pass
