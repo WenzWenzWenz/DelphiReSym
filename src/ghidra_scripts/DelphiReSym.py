@@ -149,28 +149,6 @@ def warning(msg: str) -> None:
         print(f"[WARNING] {msg}")
 
 
-def printGeneralInformation() -> int:
-    """
-    Print some general meta data messages if GENERALINFORMATION is True.
-
-    Parameters:
-        originalFunctionCount (int): Number of functions as counted by ghidra's API pre-execution
-    """
-    # grab FunctionManager
-    functionManager = currentProgram.getFunctionManager()
-
-    # currentProgram is the built-in variable that points to Program class
-    print(f"|> PRINTING GENERAL INFORMATION FOR PROGRAM: {currentProgram.getName()}")
-    print(f"|> Believed compiler: {currentProgram.getCompiler()}")
-    # currentProgram.getLanguage() could be interesting instead of the following:
-    print(f"|> Believed ptr size: {currentProgram.getDefaultPointerSize()}")
-    print(f"|> Executable format: {currentProgram.getExecutableFormat()}")
-    originalFunctionCount = functionManager.getFunctionCount()
-    print(f"|> Total number of funcs: {originalFunctionCount}")
-    print(f"|> Image base addr: {currentProgram.getImageBase()}")
-    return originalFunctionCount
-
-
 ##########################################################################
 #    HELPER FUNCTIONS                                                    #
 ##########################################################################
@@ -976,8 +954,8 @@ def main() -> None:
     Main function orchestrating the analysis and recovery of symbol and RTTI information from an
     executable's VMTs and MDTs within Ghidra.
     """
-    # print general information and retrieve pre-execution function count
-    originalFunctionCount = printGeneralInformation()
+    # retrieve original function count at program start
+    originalFunctionCount = currentProgram.getFunctionManager().getFunctionCount()
 
     # for statistical logging in the end
     totalFunctions = currentProgram.getFunctionManager().getFunctionCount()
