@@ -754,7 +754,7 @@ def applySymbols(allSymbolInfo: dict, settings: dict) -> dict:
             continue
         namespace = prepareNamespace(nameSpaceStr)
 
-        for methodEntry, secondLevelValue in topLevelValue["methodEntriesInfo"].items():
+        for secondLevelValue in topLevelValue["methodEntriesInfo"].values():
             # grab all pieces of information from all MDT levels and recover symbols accordingly
             functionEntryPoint = secondLevelValue["functionEntryPoint"]
             functionName = secondLevelValue["nameOfFunction"]
