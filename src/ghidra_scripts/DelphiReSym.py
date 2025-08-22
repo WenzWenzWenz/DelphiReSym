@@ -1,27 +1,61 @@
-# A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct symbols of function signatures. 
+# A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct symbols of
+# function signatures.
 #@author Lukas Wenz - https://github.com/WenzWenzWenz
 #@category Delphi
-#@keybinding 
-#@menupath 
-#@toolbar 
+#@keybinding
+#@menupath
+#@toolbar
 #@runtime PyGhidra
+# -*- coding: utf-8 -*-
+"""
+A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct symbols of function signatures.
+"""
+from __future__ import annotations
 
+import pyghidra
 
-import pyghidra  # type: ignore
-import typing
-if typing.TYPE_CHECKING:
-   from ghidra.ghidra_builtins import *  # type: ignore
-# from ghidra.program.model.data import PointerDataType, CategoryPath  # type: ignore
-from ghidra.program.model.data import *  # type:ignore
-from ghidra.program.model.symbol import SourceType, Namespace  # type: ignore
-from ghidra.program.model.listing import ParameterImpl, Function  # type: ignore
-from ghidra.program.model.data import IntegerDataType, CharDataType, StructureDataType, DataTypeConflictHandler  # type: ignore
-from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock  # type: ignore
-from ghidra.program.model.address import Address, AddressOutOfBoundsException  # type:ignore
-from ghidra.util.exception import InvalidInputException, DuplicateNameException  # type:ignore
+from typing import TYPE_CHECKING, cast, Optional, Any
+from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from ghidra.ghidra_builtins import *  # type: ignore
+
+from ghidra.program.model.data import *                                        # type: ignore
+
+from ghidra.program.model.symbol import SourceType, Namespace                   # type: ignore
+from ghidra.program.model.listing import ParameterImpl, Function, Program       # type: ignore
+from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock # type: ignore
+from ghidra.program.model.address import Address, AddressOutOfBoundsException   # type: ignore
+from ghidra.util.task import TaskMonitor                                        # type: ignore
+from ghidra.util.exception import InvalidInputException, DuplicateNameException # type: ignore
+from ghidra.program.model.data import (                                         # type: ignore
+    IntegerDataType,
+    CharDataType,
+    StructureDataType,
+)
 
 # this global variable is currently used for debugging purposes only
 types = set()
+
+if _g := globals():
+    def convertToAddress(x: Any) -> Address:
+        return _g['toAddr'](x)
+    currentProgram = cast(Program, _g['currentProgram'])
+    monitor = cast(TaskMonitor, _g['monitor'])
+else:
+    raise RuntimeError('could not access ghidra scripting global variables')
+
+
+class MonitorCancel(BaseException):
+    """
+    Raised when the user cancels the process via the monitor dialog.
+    """
+
+
+def check_cancel():
+    if monitor.isCancelled():
+        raise MonitorCancel
+
 
 ##########################################################################
 #    CONFIGS'n'CONSTANTS                                                 #
@@ -146,7 +180,7 @@ def readPointer(addr: Address, ptr_size: int) -> Address:
         ghidra.program.model.address.Address: The resolved address the pointer refers to.
     """
     memory = currentProgram.getMemory()
-    return toAddr(memory.getInt(addr)) if ptr_size == 4 else toAddr(memory.getLong(addr))
+    return convertToAddress(memory.getInt(addr)) if ptr_size == 4 else convertToAddress(memory.getLong(addr))
 
 
 def readPascalString(addr: Address) -> tuple[str, int]:
@@ -314,7 +348,7 @@ def findVmts(settings: dict) -> list:
     currentAddr = settings["textBlockStartAddr"]
 
     # iterate over the .text section, 4 or 8 byte data sliding window approach (architecture dependant)
-    while currentAddr < settings["textBlockEndAddr"].subtract(settings["ptrSize"] - 1):
+        check_cancel()
         # read value at current position depending on architecture size
         currentValue = readPointer(currentAddr, settings["ptrSize"])
         # detail(f"Reading {settings["ptrSize"]} bytes @ {currentAddr} yielded: {currentValue}")
@@ -364,7 +398,7 @@ def getVmtFieldAddresses(vmtAddresses: list, settings: dict, fieldname: str) -> 
     # empty dictionary for return information
     vmtFieldRelations = {}
 
-    for vmtAddr in vmtAddresses:    
+        check_cancel()
         # compute address where the field's pointer lies
         fieldAddress = vmtAddr.add(settings[f"{fieldname}"])
         debug(f"Pointer to { {'mdtOffset': 'MDT', 'rttiOffset': 'VmtRtti'}.get(fieldname, 'UNKNOWN') } @ {fieldAddress}")
@@ -404,6 +438,7 @@ def traverseMdtTopLevel(vmtMdtRelations: dict, settings: dict) -> dict:
     vmtMdtTopInfo = {}
 
     for vmtAddr, mdtAddr in vmtMdtRelations.items():
+        check_cancel()
         # store address information for this MDT traversal
         vmtMdtTopInfo[vmtAddr] = {"mdt": mdtAddr, "methodEntries": []}
 
@@ -422,7 +457,7 @@ def traverseMdtTopLevel(vmtMdtRelations: dict, settings: dict) -> dict:
         # get all starting addresses of the MDT's MethodEntries (`AddressOfMethodEntry`) and add them to a list
         methodEntryAddresses = []
         for i in range(numOfMethodEntryRefs):
-            methodEntryRefAddr = methodEntryRefStartAddr.add(i * (settings["ptrSize"] + 4))
+            check_cancel()
             try:
                 methodEntryAddr = readPointer(methodEntryRefAddr, settings["ptrSize"])
             except MemoryAccessException:
@@ -456,7 +491,7 @@ def traverseParamEntries(firstParamEntryAddr: Address, numOfParamEntries: int, s
     """
     paramEntriesInfo = {}
     currentAddr = firstParamEntryAddr
-    for i in range(numOfParamEntries):
+        check_cancel()
         # cache addr at which each ParamEntry starts (as a key for storing information below) 
         paramEntryAddr = currentAddr
         
@@ -499,7 +534,7 @@ def traverseMethodEntries(vmtMdtTopInfo: dict, settings: dict) -> dict:
     memory = currentProgram.getMemory()
 
     # the zero-address for reusability
-    allZeroAddress = toAddr("0x0")
+    allZeroAddress = convertToAddress("0x0")
 
     # iterate over all MethodEntries of each VMT's MDT; by creating a new list, we can change the size of the underlying dictionary during runtime 
     for vmt in list(vmtMdtTopInfo.keys()):
@@ -507,6 +542,7 @@ def traverseMethodEntries(vmtMdtTopInfo: dict, settings: dict) -> dict:
         methodEntriesInfo = {}
 
         for methodEntry in vmtMdtTopInfo[vmt]["methodEntries"]:
+            check_cancel()
             # dictionary to hold relevant information for a single MethodEntry 
             methodEntryInfo = {}
 
@@ -632,6 +668,7 @@ def addNamespaceInformation(vmtRttiRelations: dict, symbolInfo: dict, settings: 
         dict: Updated symbolInfo dictionary with added `namespace` fields.
     """
     for vmt, rtti in vmtRttiRelations.items():
+        check_cancel()
         # if during traverseMethodEntries() a vmt had been removed, take this change into effect here as well
         if vmt not in symbolInfo:
             continue
@@ -667,6 +704,7 @@ def prepareNamespace(namespaceStr: str) -> Namespace:
     # start from the root namespace and iteratively grab or create its children
     parentNamespace = currentProgram.getGlobalNamespace()
     for part in namespaceParts:
+        check_cancel()
         # look for an existing namespace with this name under the current parent or create it if needed
         # remark: USER_DEFINED makes sure that later on, the information will not be overwritten by ghidra
         try:
@@ -755,6 +793,7 @@ def applySymbols(allSymbolInfo: dict, settings: dict) -> dict:
         namespace = prepareNamespace(nameSpaceStr)
 
         for secondLevelValue in topLevelValue["methodEntriesInfo"].values():
+            check_cancel()
             # grab all pieces of information from all MDT levels and recover symbols accordingly
             functionEntryPoint = secondLevelValue["functionEntryPoint"]
             functionName = secondLevelValue["nameOfFunction"]
