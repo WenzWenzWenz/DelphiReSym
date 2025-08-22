@@ -60,9 +60,9 @@ def check_cancel():
         raise MonitorCancel
 
 
-##########################################################################
-#    CONFIGS'n'CONSTANTS                                                 #
-##########################################################################
+###################################################################################################
+#    CONFIGS'n'CONSTANTS                                                                          #
+###################################################################################################
 # set whether or not to print detailed debug information to stdout
 VERBOSE_DETAIL = False
 # set whether or not to print detailed debug information to stdout
@@ -102,9 +102,9 @@ data_type_mapping = {
 }
 
 
-##########################################################################
-#    PRINTING'n'LOGGING                                                  #
-##########################################################################
+###################################################################################################
+#    PRINTING'n'LOGGING                                                                           #
+###################################################################################################
 def detail(msg: str) -> None:
     """
     Print a detailed debug message if VERBOSE_DETAIL is True.
@@ -149,9 +149,9 @@ def warning(msg: str) -> None:
         print(f"[WARNING] {msg}")
 
 
-##########################################################################
-#    HELPER FUNCTIONS                                                    #
-##########################################################################
+###################################################################################################
+#    HELPER FUNCTIONS                                                                             #
+###################################################################################################
 def read_ptr(addr: Address, ptr_size: int) -> Address:
     """
     Read a pointer of the given size from memory at the specified address.
@@ -257,9 +257,9 @@ def get_text_section(memory: Memory) -> MemoryBlock:
     raise Exception(".text segment not found")
 
 
-##########################################################################
-#    MAIN LOGIC - VMT RELATED                                            #
-##########################################################################
+###################################################################################################
+#    MAIN LOGIC - VMT RELATED                                                                     #
+###################################################################################################
 def check_vmt_candidate(
     candidate: Address,
     next_struct: Address,
@@ -366,7 +366,10 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list:
 
             # store the VMT's address for return
             vmt_addresses.append(current_address)
-            debug(f"VMT @ {current_address} passed first sanity checks. Adding it to the list of VMTs.")
+            debug(
+                f"VMT @ {current_address} passed first sanity checks. Adding it to the list of "
+                "VMTs."
+            )
 
         # forward step
         current_address = current_address.add(1)
@@ -420,9 +423,9 @@ def get_vmt_field_addresses(
     return vmt_field_addresses
 
 
-##########################################################################
-#    MAIN LOGIC - MDT RELATED                                            #
-##########################################################################
+###################################################################################################
+#    MAIN LOGIC - MDT RELATED                                                                     #
+###################################################################################################
 def traverse_mdt_top_level(
     vmt_mdt_relations: dict[Address, Address],
     settings: ArchitectureSpecificSettings,
@@ -659,9 +662,9 @@ def traverse_method_entries(
     return vmt_mdt_top_info
 
 
-##########################################################################
-#    MAIN LOGIC - RTTI_CLASS RELATED                                     #
-##########################################################################
+###################################################################################################
+#    MAIN LOGIC - RTTI_CLASS RELATED                                                              #
+###################################################################################################
 def traverse_rtti_object(addr: Address, settings: dict) -> str | None:
     """
     Traverse a Delphi RTTI object and extract string information based on its magic byte.
@@ -737,9 +740,9 @@ def add_namespace_information(vmt_rtti_relations: dict, symbol_info: dict, setti
     return symbol_info
 
 
-##########################################################################
-#    MAIN LOGIC - TRANSFORMATION FUNCTIONS                               #
-##########################################################################
+###################################################################################################
+#    MAIN LOGIC - TRANSFORMATION FUNCTIONS                                                        #
+###################################################################################################
 def prepare_namespace(namespace_str: str) -> Namespace:
     """
     Create or retrieve a nested namespace hierarchy in Ghidra's symbol table from a namespace
@@ -874,7 +877,9 @@ def apply_symbols(all_symbol_info: dict) -> dict:
                 ):
                     param_tuples.append((third_level_value["ParamName"], namespace_str))
                     continue
-                param_tuples.append((third_level_value["ParamName"], third_level_value["rttiNamespace"]))
+                param_tuples.append(
+                    (third_level_value["ParamName"], third_level_value["rttiNamespace"])
+                )
 
             # -------------------------- APPLY FUNCTION NAMES ----------------------------------- #
             # start the actual symbol name recovery transformation with grabbing the function to
@@ -905,7 +910,7 @@ def apply_symbols(all_symbol_info: dict) -> dict:
                     apply_count["fqn"] += 1
                 except (
                     Exception
-                ) as e:  # java.lang.IllegalArgumentException: namespace is from different program 
+                ) as e:  # java.lang.IllegalArgumentException: namespace is from different program
                     # instance: System::TMarshal
                     warning(e)
                     warning(namespace)
@@ -955,9 +960,9 @@ def apply_symbols(all_symbol_info: dict) -> dict:
     return apply_count
 
 
-##########################################################################
-#    MAIN LOGIC - ACTUAL MAIN                                            #
-##########################################################################
+###################################################################################################
+#    MAIN LOGIC - ACTUAL MAIN                                                                     #
+###################################################################################################
 def main() -> None:
     """
     Main function orchestrating the analysis and recovery of symbol and RTTI information from an
@@ -1037,10 +1042,10 @@ def main() -> None:
         "function count."
     )
     info(
-        f"[8/8] Statistics: Number of applied parameter sets: {recovery_counts['paramSet']}, yielding "
-        f"{recovery_counts['paramSet']/total_function_count*100:.2f}% of all functions; or "
-        f"{recovery_counts['paramSet']/original_function_count*100:.2f}% when using pre-execution "
-        "function count."
+        f"[8/8] Statistics: Number of applied parameter sets: {recovery_counts['paramSet']}, "
+        f"yielding {recovery_counts['paramSet']/total_function_count*100:.2f}% of all functions; "
+        f"or {recovery_counts['paramSet']/original_function_count*100:.2f}% when using "
+        "pre-execution function count."
     )
     info("[8/8] Finished.")
 
