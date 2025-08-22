@@ -213,3 +213,5 @@ src/src/
 src/build.gradle
 src/extension.properties
 src/ghidra_scripts/README.txt
+src/.gradle/
+src/bin/
