@@ -857,17 +857,13 @@ def main() -> None:
 
     # get memory interface of executable (beware: "memory changes should generally be completed prior to analysis.")
     memory = currentProgram.getMemory()
-    # get .text section of executable
-    textBlock = getTextBlock(memory)
+    textSection = getTextSection(memory)
+    settings.textBlockStartAddr = textSection.getStart()
+    settings.textBlockEndAddr = textSection.getEnd()
 
-    # get start address of .text section
-    settings["textBlockStartAddr"] = textBlock.getStart()
-    # get end address of .text section
-    settings["textBlockEndAddr"] = textBlock.getEnd()
     # print more general information
-    print(f"|> Size of .text section: {textBlock.getSizeAsBigInteger()}")
+    print(f"|> Size of .text section: {textSection.getSizeAsBigInteger()}")
 
-    # search for VMT candidates according to jumpDist sized dereferences in Ghidra's listing
     info("[1/8] Starting to scan for candidate VMTs & performing sanity checks...")
     vmtAddresses = findVmts(settings)
 
