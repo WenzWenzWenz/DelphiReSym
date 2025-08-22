@@ -28,7 +28,7 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 
 4. **Load the script**:
 
-   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version) or alternatively from [src](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/src/ghidra_scripts/DelphiReSym.py).
+   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version).
    * Go to **Window > Script Manager** (green ▶️ button).
    * Click the **"Manage Script Directories"** button (the button which looks like an itemize symbol).
    * Add the folder containing the downloaded `DelphiReSym.py` via the green ➕ icon.
@@ -116,13 +116,13 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
   *Note*: The actual accuracy for total parameter **tuples** is higher, since each function may have multiple parameters.
 
 
-## 📝 TODO
+## 📝 ROADMAP
 
+- [ ] *Current: Enhance script's general prettiness* ✨
 - [ ] Increase coverage of Delphi versions:
    - [ ] Finish format analysis. Initial format analysis for Delphi versions *Delphi 2* through *Delphi 2006* has been conducted (hopefully works for *Delphi 2007* as well).
    - [ ] Evaluate efficacy for old samples of Malware families.
    - [ ] Integrate logging functionality for errors.
-- [ ] Enhance script's general prettiness ✨
 - [ ] Integrate Ghidra [headless mode](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)
 - [ ] Update ">" "<>" RTTI_Class name parsing & dedup similar RTTI_Class type names
 - [ ] Feature: replace typecasts with actual RTTI datatype structures (credit goes to [@huettenhain](https://github.com/huettenhain)!)
