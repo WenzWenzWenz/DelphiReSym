@@ -222,7 +222,7 @@ def getArchitectureSettings() -> dict:
     return settings
 
 
-def getTextBlock(memory: Memory) -> MemoryBlock:
+def getTextSection(memory: Memory) -> MemoryBlock:
     """
     Retrieve the '.text' memory block from the given memory object.
 
@@ -235,9 +235,9 @@ def getTextBlock(memory: Memory) -> MemoryBlock:
     Raises:
         Exception: If the '.text' segment is not found.
     """
-    for block in memory.getBlocks():
-        if block.getName() == ".text":
-            return block
+    for section in memory.getBlocks():
+        if section.getName() == ".text":
+            return section
     raise Exception(".text segment not found")
 
 
