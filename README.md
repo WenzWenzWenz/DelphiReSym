@@ -28,7 +28,7 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 
 4. **Load the script**:
 
-   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version).
+   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version) *(or the main branch, but that one might not be stable)*.
    * Go to **Window > Script Manager** (green ▶️ button).
    * Click the **"Manage Script Directories"** button (the button which looks like an itemize symbol).
    * Add the folder containing the downloaded `DelphiReSym.py` via the green ➕ icon.
@@ -116,7 +116,7 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
   *Note*: The actual accuracy for total parameter **tuples** is higher, since each function may have multiple parameters.
 
 
-## 📝 ROADMAP
+## 📝 Roadmap
 
 - [ ] *Current: Enhance script's general prettiness* ✨
 - [ ] Increase coverage of Delphi versions:
