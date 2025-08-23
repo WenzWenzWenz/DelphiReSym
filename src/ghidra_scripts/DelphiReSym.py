@@ -14,15 +14,11 @@ function signatures.
 from __future__ import annotations
 
 import pyghidra
-
 from typing import TYPE_CHECKING, cast, Optional, Any
-from dataclasses import dataclass
-
+from dataclasses import dataclass, field
 if TYPE_CHECKING:
     from ghidra.ghidra_builtins import *                                        # type: ignore
-
 from ghidra.program.model.data import *                                         # type: ignore
-
 from ghidra.program.model.symbol import SourceType, Namespace                   # type: ignore
 from ghidra.program.model.listing import ParameterImpl, Function, Program       # type: ignore
 from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock # type: ignore
@@ -41,6 +37,8 @@ types = set()
 if _g := globals():
 
     def convert_to_addr(x: Any) -> Address:
+        if isinstance(x, Address):
+            return x
         return _g["toAddr"](x)
 
     currentProgram = cast(Program, _g["currentProgram"])
@@ -424,12 +422,43 @@ def get_vmt_field_addresses(
 
 
 ###################################################################################################
+#    DATA CLASSES for VirtualMethodTables, MethodDefinitionTables, MethodEntries and Parameters   #
+###################################################################################################
+@dataclass
+class ParamInfo:
+    rtti_addr: Address
+    param_name: str
+    rtti_namespace: str
+
+
+@dataclass
+class MeInfo:
+    func_entry_point: Optional[Address] = 0
+    func_name: Optional[str] = ""
+    ret_type_at: Optional[Address | str] = "n.a."
+    ret_type_str: Optional[str] = "void"
+    param_entries: dict[Address, ParamInfo] = field(default_factory=dict)
+
+
+@dataclass
+class MdtMeInfo:
+    mdt: Address
+    namespace: Optional[str] = ""
+    method_entries: dict[Address, MeInfo] = field(default_factory=dict)
+
+
+@dataclass
+class VmtMdtMapping:
+    entries: dict[Address, MdtMeInfo] = field(default_factory=dict)
+
+
+###################################################################################################
 #    MAIN LOGIC - MDT RELATED                                                                     #
 ###################################################################################################
 def traverse_mdt_top_level(
     vmt_mdt_relations: dict[Address, Address],
     settings: ArchitectureSpecificSettings,
-) -> dict:
+) -> VmtMdtMapping:
     """
     Traverse the top-level structure of MDTs corresponding to a list of VMTs.
 
@@ -445,23 +474,20 @@ def traverse_mdt_top_level(
         dict: A dictionary mapping each VMT address to a nested dictionary with its MDT address and
             a list of resolved method entry addresses.
     """
-    # regrab memory interface
-    memory = currentProgram.getMemory()
+    memory_interface = currentProgram.getMemory()
 
-    vmt_mdt_top_level_info = {}
+    mapping = VmtMdtMapping()
 
     for vmt_addr, mdt_addr in vmt_mdt_relations.items():
         check_cancel()
         # store address information for this MDT traversal
-        vmt_mdt_top_level_info[vmt_addr] = {"mdt": mdt_addr, "methodEntries": []}
+        current_info = MdtMeInfo(mdt=mdt_addr)
 
         # navigate to the NumOfMethodEntryRefs field
         num_of_method_entry_ref_structs_field = mdt_addr.add(2)
         # grab its 2B long content (architecture-independant)
-        num_of_method_entry_ref_structs = memory.getShort(num_of_method_entry_ref_structs_field)
-        debug(
-            f"num_of_method_entry_ref_structs: {num_of_method_entry_ref_structs} for MDT @ "
-            f"{mdt_addr}"
+        num_of_method_entry_ref_structs = memory_interface.getShort(
+            num_of_method_entry_ref_structs_field
         )
 
         if num_of_method_entry_ref_structs == 0:
@@ -472,7 +498,6 @@ def traverse_mdt_top_level(
 
         # get all starting addresses of the MDT's MethodEntries (`AddressOfMethodEntry`) and add
         # them to a list
-        method_entry_addresses = []
         for i in range(num_of_method_entry_ref_structs):
             check_cancel()
             current_method_entry_ref_field = method_entry_refs_start_addr.add(
@@ -486,20 +511,19 @@ def traverse_mdt_top_level(
                 warning(f"Could not read bytes @ {current_method_entry_ref_field}. Skipping.")
                 continue
 
-            method_entry_addresses.append(current_method_entry_addr)
+            current_info.method_entries[current_method_entry_addr] = MeInfo()
 
         # add address information of found methodEntries to correlated MDT / VMT information
-        vmt_mdt_top_level_info[vmt_addr]["methodEntries"].extend(method_entry_addresses)
+        mapping.entries[vmt_addr] = current_info
 
-    debug(f"Dictionary information after traverseMdtTopLevel(): {vmt_mdt_top_level_info}")
-    return vmt_mdt_top_level_info
+    return mapping
 
 
 def traverse_param_entries(
     first_param_entry_addr: Address,
     num_of_param_entries: int,
     settings: ArchitectureSpecificSettings,
-):
+) -> dict[Address, ParamInfo]:
     """
     Traverse a sequence of ParamEntries and extract relevant RTTI and naming information.
 
@@ -538,19 +562,17 @@ def traverse_param_entries(
         # go to AddrOfRtti field of next ParamEntry (remark: 3 bytes of additional data for
         # numOfParamEntries > 1)
         current_addr = current_addr.add(str_len + 3)
-        param_entries_info[param_entry_addr] = {
-            "AddrOfRtti": rtti,
-            "ParamName": param_name,
-            "rttiNamespace": rtti_namespace,
-        }
+        param_entries_info[param_entry_addr] = ParamInfo(
+            rtti_addr=rtti, param_name=param_name, rtti_namespace=rtti_namespace
+        )
 
     return param_entries_info
 
 
 def traverse_method_entries(
-    vmt_mdt_top_info: dict,
+    vmt_mdt_top_info: VmtMdtMapping,
     settings: ArchitectureSpecificSettings,
-) -> dict:
+) -> VmtMdtMapping:
     """
     Traverse all MethodEntries associated with each VMT's MDT and collect detailed metadata.
 
@@ -567,41 +589,43 @@ def traverse_method_entries(
 
     # iterate over all MethodEntries of each VMT's MDT; by creating a new list, we can change the
     # size of the underlying dictionary during runtime
-    for vmt in list(vmt_mdt_top_info.keys()):
-        # store information about relevant fields for each MethodEntry of an MDT
-        method_entries_info = {}
+    for vmt, mdt_me_info in list(vmt_mdt_top_info.entries.items()):
+        # # store information about relevant fields for each MethodEntry of an MDT
+        method_entries_info = mdt_me_info
+        # maybe i just need some shallow references though
+        # method_entries_info = deepcopy(mdt_me_info)
 
-        for method_entry in vmt_mdt_top_info[vmt]["methodEntries"]:
+        for method_entry_at in mdt_me_info.method_entries.keys():
             check_cancel()
             # dictionary to hold relevant information for a single MethodEntry
-            method_entry_info = {}
+            method_entry_info = MeInfo()
 
             # grab entry point of the MethodEntry's function definition
             try:
-                function_def_addr_field = method_entry.add(2)
+                function_def_addr_field = method_entry_at.add(2)
             except AddressOutOfBoundsException:
                 # this error can happen when a huge concatenation of addresses structure is falsely
                 # detected as a VMT, hence, ignore its method entries
                 break
             try:
-                method_entry_info["functionEntryPoint"] = read_ptr(
+                method_entry_info.func_entry_point = read_ptr(
                     function_def_addr_field, settings.ptr_size
                 )
             except MemoryAccessException:
                 warning(
                     f"Could not read bytes @ {function_def_addr_field}. Skipping methodEntry: "
-                    f"{method_entry}."
+                    f"{method_entry_at}."
                 )
                 continue
 
             # grab the corresponding function name
             name_of_function_addr = function_def_addr_field.add(settings.ptr_size)
             try:
-                method_entry_info["nameOfFunction"], strLen = read_pascal_str(name_of_function_addr)
+                method_entry_info.func_name, strLen = read_pascal_str(name_of_function_addr)
             except MemoryAccessException:
                 warning(
                     f"Couldn't grab nameOfFunctionAddr: {name_of_function_addr}. Skipping "
-                    f"methodEntry: {method_entry}."
+                    f"methodEntry: {method_entry_at}."
                 )
                 continue
 
@@ -610,16 +634,12 @@ def traverse_method_entries(
             try:
                 dereferenced_ret_type_addr = read_ptr(ret_type_addr_field, settings.ptr_size)
                 # if all zero'd, void is the return type
-                if dereferenced_ret_type_addr == all_zero_addr:
-                    method_entry_info["returnTypeRttiAt"] = "n.a."
-                    method_entry_info["returnTypeStr"] = "void"
-                    detail(f"void return type applied for returnTypeAddress: {ret_type_addr_field}")
-                else:
-                    method_entry_info["returnTypeRttiAt"] = dereferenced_ret_type_addr
+                if dereferenced_ret_type_addr != all_zero_addr:
+                    method_entry_info.ret_type_at = dereferenced_ret_type_addr
                     doubly_dereferenced_ret_type_addr = read_ptr(
                         dereferenced_ret_type_addr, settings.ptr_size
                     )
-                    method_entry_info["returnTypeStr"] = traverse_rtti_object(
+                    method_entry_info.ret_type_str = traverse_rtti_object(
                         doubly_dereferenced_ret_type_addr, settings
                     )
             except MemoryAccessException:
@@ -642,21 +662,21 @@ def traverse_method_entries(
             ):
                 # addresses outside the .text section mean false positive ParamEntries, hence remove
                 # them
-                del vmt_mdt_top_info[vmt]
+                del vmt_mdt_top_info.entries[vmt]
                 break
 
             # get information about position and names of the specific MethodEntry's parameters
-            method_entry_info["paramEntries"] = traverse_param_entries(
+            method_entry_info.param_entries = traverse_param_entries(
                 first_param_entry_field, num_of_param_entries, settings
             )
 
             # store information to the dictionary holding data for all MethodEntries of an MDT
-            method_entries_info[method_entry] = method_entry_info
+            method_entries_info.method_entries[method_entry_at] = method_entry_info
 
         # the else clause only triggers, if the inner loops break didn't trigger
         else:
             # store information to the dictionary holding all data
-            vmt_mdt_top_info[vmt]["methodEntriesInfo"] = method_entries_info
+            vmt_mdt_top_info.entries[vmt] = method_entries_info
 
     debug(f"Dictionary information after traverseMethodEntries(): {vmt_mdt_top_info}")
     return vmt_mdt_top_info
@@ -712,7 +732,9 @@ def traverse_rtti_object(addr: Address, settings: dict) -> str | None:
     return namespace
 
 
-def add_namespace_information(vmt_rtti_relations: dict, symbol_info: dict, settings: dict) -> dict:
+def add_namespace_information(
+    vmt_rtti_relations: dict, symbol_info: VmtMdtMapping, settings: dict
+) -> VmtMdtMapping:
     """
     Augment symbol information with the namespace string derived via RTTI traversal. It ensures
     consistency with any VMTs previously filtered out.
@@ -729,12 +751,10 @@ def add_namespace_information(vmt_rtti_relations: dict, symbol_info: dict, setti
         check_cancel()
         # if during traverseMethodEntries() a vmt had been removed, take this change into effect
         # here as well
-        if vmt not in symbol_info:
+        if vmt not in symbol_info.entries:
             continue
 
-        namespace = traverse_rtti_object(rtti, settings)
-        debug(f"Mapping namespace information {namespace} to vmt @ {vmt}")
-        symbol_info[vmt]["namespace"] = namespace
+        symbol_info.entries[vmt].namespace = traverse_rtti_object(rtti, settings)
 
     debug(f"Final dictionary information: {symbol_info}")
     return symbol_info
@@ -832,7 +852,7 @@ def prepare_data_type(type_string: str) -> DataType:
     return final_data_type
 
 
-def apply_symbols(all_symbol_info: dict) -> dict:
+def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
     """
     Handles the actual symbol name recovering, given all previously gathered information.
 
@@ -851,50 +871,45 @@ def apply_symbols(all_symbol_info: dict) -> dict:
     # count how many VMT/functions have been fully recovered (evaluation information only)
     apply_count = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "paramSet": 0}
 
-    for vmt, top_level_val in all_symbol_info.items():
+    for vmt, mdt_me_info in all_symbol_info.entries.items():
         detail(f"[7/8] Currently proceessing symbol information for VMT @ {vmt} ...")
         apply_count["vmt"] += 1
 
         # get namespace information from ghidra's symbol table or create it if required
-        if "namespace" not in top_level_val.keys():
-            continue
-        namespace_str = top_level_val["namespace"]
-        if namespace_str is None:
+        namespace_str = mdt_me_info.namespace
+        if namespace_str is None or not namespace_str:
             continue
         namespace = prepare_namespace(namespace_str)
 
-        for second_level_val in top_level_val["methodEntriesInfo"].values():
+        for _, me_info in mdt_me_info.method_entries.items():
             check_cancel()
             # grab all pieces of information from all MDT levels and recover symbols accordingly
-            function_entry_point = second_level_val["functionEntryPoint"]
-            function_name = second_level_val["nameOfFunction"]
-            ret_type_str = second_level_val["returnTypeStr"]
+            func_entry_point = me_info.func_entry_point
+            func_name = me_info.func_name
+            ret_type_str = me_info.ret_type_str
             param_tuples = []
-            for _, third_level_value in second_level_val["paramEntries"].items():
-                if (
-                    third_level_value["rttiNamespace"] is None
-                    or third_level_value["ParamName"] == "Self"
-                ):
-                    param_tuples.append((third_level_value["ParamName"], namespace_str))
+            for _, param_info in me_info.param_entries.items():
+                # TODO: I think I can manage this now more easily with default value in dataclass
+                # and not overwriting checks
+                if param_info.rtti_namespace is None or param_info.param_name == "Self":
+                    param_tuples.append((param_info.param_name, namespace_str))
                     continue
-                param_tuples.append(
-                    (third_level_value["ParamName"], third_level_value["rttiNamespace"])
-                )
+                param_tuples.append((param_info.param_name, param_info.rtti_namespace))
 
             # -------------------------- APPLY FUNCTION NAMES ----------------------------------- #
             # start the actual symbol name recovery transformation with grabbing the function to
             # edit
-            function = function_manager.getFunctionAt(function_entry_point)
+            function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
             # if ghidra doesn't recognize this address already as a function
             if not function:
                 # creating via the light-weight FlatProgramAPI function sets a name automatically
-                function = createFunction(function_entry_point, function_name)
+                function = createFunction(convert_to_addr(func_entry_point), func_name)
                 # function could not be created for some reason, hence skip its symbol recovery
                 if function is None:
                     continue
             else:
                 # if function is already been known to ghidra, replace its name
-                function.setName(function_name, SourceType.USER_DEFINED)
+                function.setName(func_name, SourceType.USER_DEFINED)
 
             apply_count["function"] += 1
             # ----------------------------------------------------------------------------------- #
@@ -904,8 +919,8 @@ def apply_symbols(all_symbol_info: dict) -> dict:
                 try:
                     function.setParentNamespace(namespace)
                     detail(
-                        f"Successfully applied FQN {namespace}::{function_name} function @ "
-                        f"{function_entry_point}."
+                        f"Successfully applied FQN {namespace}::{func_name} function @ "
+                        f"{func_entry_point}."
                     )
                     apply_count["fqn"] += 1
                 except (
@@ -927,7 +942,7 @@ def apply_symbols(all_symbol_info: dict) -> dict:
 
                 detail(
                     f"Successfully applied return type {ret_type_str} to function "
-                    f"@ {function_entry_point}."
+                    f"@ {func_entry_point}."
                 )
                 apply_count["return"] += 1
             # ----------------------------------------------------------------------------------- #
@@ -1000,19 +1015,19 @@ def main() -> None:
     # {<vmtAddr>: {"mdt": <mdtAddress>, "methodEntries":[<methodEntry1Addr>, <methodEntry2Addr>,
     # ...]}}
     info("[4/8] Grabbing the MethodEntries of every found MDT...")
-    vmt_mdt_top_level_info = traverse_mdt_top_level(vmt_mdt_relations, settings)
+    vmt_mdt_top_level = traverse_mdt_top_level(vmt_mdt_relations, settings)
 
     # entlang der MDT Struktur entlang hangeln, um relevante Daten zu erhalten.
     info("[5/8] Extracting information of all MethodEntries of every found MDT...")
-    vmt_mdt_symbol_info = traverse_method_entries(vmt_mdt_top_level_info, settings)
+    vmt_mdt_symbols = traverse_method_entries(vmt_mdt_top_level, settings)
 
     # complete symbol recovery information by calling traverseRttiClass(addr, settings) for all VMTs
     info("[6/8] Extracting the RTTI namespaces for every VMT/MDT...")
-    all_symbol_info = add_namespace_information(vmt_rtti_relations, vmt_mdt_symbol_info, settings)
+    all_symbols = add_namespace_information(vmt_rtti_relations, vmt_mdt_symbols, settings)
 
     # apply symbol name recovery
     info("[7/8] Reconstructing all symbol names...")
-    recovery_counts = apply_symbols(all_symbol_info)
+    recovery_counts = apply_symbols(all_symbols)
 
     # print final statistics
     total_function_count = currentProgram.getFunctionManager().getFunctionCount()

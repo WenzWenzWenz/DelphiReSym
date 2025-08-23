@@ -215,3 +215,6 @@ src/extension.properties
 src/ghidra_scripts/README.txt
 src/.gradle/
 src/bin/
+
+# Other
+src/ghidra_scripts/orphan.py
