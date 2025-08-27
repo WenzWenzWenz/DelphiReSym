@@ -54,6 +54,9 @@ class MonitorCancel(BaseException):
 
 
 def check_cancel():
+    """
+    This enables Ghidra-GUI's "Cancel" button to actually stop the execution. 
+    """
     if monitor.isCancelled():
         raise MonitorCancel
 
@@ -200,6 +203,10 @@ def get_architecture_settings(text_section: MemoryBlock) -> ArchitectureSpecific
 
     The text block start and end addresses are just place holders at initialization time.
 
+    Parameters:
+        text_section (ghidra.program.model.mem.MemoryBlock): The .text section memory block to
+            look up its boarders for.
+
     Returns:
         ArchitectureSpecificSettings: A dataclass instance holding architecture settings.
     """
@@ -343,7 +350,6 @@ def get_vmt_field_addresses(
     vmt_addresses: list[Address],
     settings: ArchitectureSpecificSettings,
     offset: int,
-    debug_name: str,
 ) -> dict:
     """
     Resolve the addresses of specific VMT fields and validate their targets.
@@ -352,8 +358,8 @@ def get_vmt_field_addresses(
     RTTI), dereferences it, and adds it to a returned dict.
 
     Parameters:
-        vmtAddresses (list[Address]): List of candidate VMT addresses.
-        settings (dict): Architecture-specific settings including offsets and .text boundaries.
+        vmt_addresses (list[Address]): List of candidate VMT addresses.
+        settings (dict): A dataclass instance holding architecture settings.
         fieldname (str): Key indicating which field to extract (e.g., 'mdtOffset', 'rttiOffset').
 
     Returns:
@@ -411,9 +417,9 @@ class VmtMdtMapping:
 ###################################################################################################
 def get_method_entries(
     start_addr: Address,
-    num_of_method_entry_ref_structs: int,
+    num_of_method_entry_refs: int,
     settings: ArchitectureSpecificSettings,
-    current_info: MdtMeInfo,
+    info: MdtMeInfo,
  ) -> MdtMeInfo:
     """
     Given an instance of an MdtMeInfo dataclass, grab each method entry address and prepare MeInfo
@@ -430,7 +436,7 @@ def get_method_entries(
         MdtMeInfo: The transformed dataclass instance, in which for each method entry an MeInfo
             dataclass instance is prepared to be filled with information later.
     """
-    for i in range(num_of_method_entry_ref_structs):
+    for i in range(num_of_method_entry_refs):
         check_cancel()
 
         current_method_entry_ref_field = start_addr.add(
@@ -444,9 +450,9 @@ def get_method_entries(
             warning(f"Could not read bytes @ {current_method_entry_ref_field}. Skipping.")
             continue
 
-        current_info.method_entries[current_method_entry_addr] = MeInfo()
+        info.method_entries[current_method_entry_addr] = MeInfo()
 
-    return current_info
+    return info
 
 
 def traverse_mdt_top_level(
@@ -461,7 +467,7 @@ def traverse_mdt_top_level(
     associated method entry addresses.
 
     Parameters:
-        vmtMdtRelations (dict): Mapping of VMT addresses to their MDT addresses.
+        vmt_mdt_relations (dict): Mapping of VMT addresses to their MDT addresses.
         settings (dict): Architecture-specific settings including pointer size.
 
     Returns:
@@ -507,9 +513,9 @@ def traverse_param_entries(
     the information in a structured dictionary.
 
     Parameters:
-        firstParamEntryAddr (ghidra.program.model.address.Address): Starting address of the first
+        first_param_entry_addr (ghidra.program.model.address.Address): Starting address of the first
             ParamEntry.
-        numOfParamEntries (int): Number of ParamEntries to process.
+        num_of_param_entries (int): Number of ParamEntries to process.
         settings (dict): Architecture-specific settings including pointer size.
 
     Returns:
@@ -674,7 +680,7 @@ def traverse_rtti_object(addr: Address, settings: dict) -> str | None:
         settings (dict): Architecture-specific settings including pointer size.
 
     Returns:
-        str | None: Namespace of the RTTI_Class's VMT as a string, or the the RTTI object's name
+        str|None: Namespace of the RTTI_Class's VMT as a string, or the the RTTI object's name
             (if it's not an RTTI_Class), or None if the structure is invalid.
     """
     # regrab memory interface
