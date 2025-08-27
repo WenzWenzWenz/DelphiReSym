@@ -523,29 +523,30 @@ def traverse_param_entries(
             address, name, and namespace.
     """
     param_entries_info = {}
+
     current_addr = first_param_entry_addr
+
     for _ in range(num_of_param_entries):
         check_cancel()
-        # cache addr at which each ParamEntry starts (as a key for storing information below)
+    
+        # grab information
         param_entry_addr = current_addr
-        # get addr of RTTI object (indirect reference hence dereference)
         try:
             rtti = read_ptr(read_ptr(current_addr, settings.ptr_size), settings.ptr_size)
             rtti_namespace = traverse_rtti_object(rtti, settings)
         except Exception:
             rtti = None
             rtti_namespace = None
-
-        # go to NameOfRtti field
-        current_addr = current_addr.add(settings.ptr_size + 2)
-        # grab name and size information
-        param_name, str_len = read_pascal_str(current_addr)
-        # go to AddrOfRtti field of next ParamEntry (remark: 3 bytes of additional data for
-        # numOfParamEntries > 1)
-        current_addr = current_addr.add(str_len + 3)
+        param_name_addr = current_addr.add(settings.ptr_size + 2)
+        param_name, str_len = read_pascal_str(param_name_addr)
+        
+        # store information
         param_entries_info[param_entry_addr] = ParamInfo(
             rtti_addr=rtti, param_name=param_name, rtti_namespace=rtti_namespace
         )
+
+        # next ParamEntry
+        current_addr = param_name_addr.add(str_len + 3)
 
     return param_entries_info
 
