@@ -305,62 +305,42 @@ def check_vmt_candidate(
     )
 
 
-def find_vmts(settings: ArchitectureSpecificSettings) -> list:
+def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
     """
     Scan the .text section for potential VMT addresses.
 
-    Uses a sliding window approach based on pointer size and jump distance to identify forward
-    references that may indicate the presence of a VMT. Applies basic sanity checks before accepting
-    each candidate.
+    Uses a sliding window approach to identify forward references of a specific size that may
+    indicate the presence of a VMT. Applies sanity checks before accepting each candidate.
 
     Parameters:
-        settings (dict): Architecture-specific settings including pointer size, jump distance,
-                        and start/end addresses of the .text block.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
-        list[Address]: A list of addresses likely representing VMTs.
+        list[Address]: A list of addresses of candidate VMTs.
     """
+    vmt_addresses = []
 
     text_block_size = settings.text_block_end_addr.subtract(settings.text_block_start_addr)
 
-    # empty list to be filled with vmt addresses
-    vmt_addresses = []
     current_address = settings.text_block_start_addr
-
-    # iterate over the .text section, 4 or 8 byte data sliding window approach (architecture
-    # dependant)
     while current_address < settings.text_block_end_addr.subtract(settings.ptr_size - 1):
         check_cancel()
-        # read value at current position depending on architecture size
+        
         current_val = read_ptr(current_address, settings.ptr_size)
-
-        # calculate the displacement between two addresses (this - addr)
         distance = current_val.subtract(current_address)
-        # necessary but not sufficient conditional for identifying VMTs
+        
         if distance == settings.jump_dist:
-            debug(
-                f"Found forward reference of {settings.jump_dist} bytes -> "
-                f"potential VMT found @ {current_address}"
-            )
-
-            # although not quite a sufficient conditional for VMT identification, it still gets rid
-            # of a lot of false positives by performing several sanity checks
             if not check_vmt_candidate(current_address, current_val, settings):
                 debug(f"REJECTED VMT candidate @ {current_address}. Didn't pass sanity checks.")
                 current_address = current_address.add(1)
                 continue
 
-            # store the VMT's address for return
             vmt_addresses.append(current_address)
-            debug(
-                f"VMT @ {current_address} passed first sanity checks. Adding it to the list of "
-                "VMTs."
-            )
+            debug(f"VMT @ {current_address} passed sanity checks. Adding it to the list of VMTs.")
 
-        # forward step
         current_address = current_address.add(1)
 
-        # since this function takes the longest amount of time, give an amateur progress bar
+        # progress bar, since this part of the code takes the longest amount of time
         if VERBOSE_INFO:
             progress = current_address.subtract(settings.text_block_start_addr)
             if progress % 100000 == 0:
