@@ -199,8 +199,8 @@ def read_pascal_str(addr: Address) -> tuple[str, int]:
 class ArchitectureSpecificSettings:
     ptr_size: int
     jump_dist: int
-    text_block_start_addr: Optional[Address] = None
-    text_block_end_addr: Optional[Address] = None
+    text_block_start_addr: Address
+    text_block_end_addr: Address
 
     @property
     def mdt_offset(self) -> int:
@@ -211,7 +211,7 @@ class ArchitectureSpecificSettings:
         return self.ptr_size * 4
 
 
-def get_architecture_settings() -> ArchitectureSpecificSettings:
+def get_architecture_settings(text_section: MemoryBlock) -> ArchitectureSpecificSettings:
     """
     Return a dataclass instance holding information about architecture-specific settings, including
     pointer size and architecture specific jump distances to MDT and RTTI_Class.
@@ -221,12 +221,18 @@ def get_architecture_settings() -> ArchitectureSpecificSettings:
     Returns:
         ArchitectureSpecificSettings: A dataclass instance holding architecture settings.
     """
-    ptr_size = currentProgram.getDefaultPointerSize()
+    start = text_section.getStart()
+    end = text_section.getEnd()
 
+    ptr_size = currentProgram.getDefaultPointerSize()
     if ptr_size == 4:
-        return ArchitectureSpecificSettings(ptr_size=4, jump_dist=88)
+        return ArchitectureSpecificSettings(
+            ptr_size=4, jump_dist=88, text_block_start_addr=start, text_block_end_addr=end
+        )
     if ptr_size == 8:
-        return ArchitectureSpecificSettings(ptr_size=8, jump_dist=200)
+        return ArchitectureSpecificSettings(
+            ptr_size=8, jump_dist=200, text_block_start_addr=start, text_block_end_addr=end
+        )
     raise RuntimeError(f"Unsupported pointer size: {ptr_size}")
 
 
@@ -977,18 +983,11 @@ def main() -> None:
     Main function orchestrating the analysis and recovery of symbol and RTTI information from an
     executable's VMTs and MDTs within Ghidra.
     """
-    # retrieve original function count at program start
     original_function_count = currentProgram.getFunctionManager().getFunctionCount()
 
-    # grab relevant numbers which depend on the architecture of the executable
-    settings = get_architecture_settings()
-
-    # get memory interface of executable (beware: "memory changes should generally be completed
-    # prior to analysis.")
-    memory = currentProgram.getMemory()
-    text_section = get_text_section(memory)
-    settings.text_block_start_addr = text_section.getStart()
-    settings.text_block_end_addr = text_section.getEnd()
+    memory_interface = currentProgram.getMemory()
+    text_section = get_text_section(memory_interface)
+    settings = get_architecture_settings(text_section)
 
     # print more general information
     print(f"|> Size of .text section: {text_section.getSizeAsBigInteger()}")
