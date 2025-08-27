@@ -409,6 +409,46 @@ class VmtMdtMapping:
 ###################################################################################################
 #    MAIN LOGIC - MDT RELATED                                                                     #
 ###################################################################################################
+def get_method_entries(
+    start_addr: Address,
+    num_of_method_entry_ref_structs: int,
+    settings: ArchitectureSpecificSettings,
+    current_info: MdtMeInfo,
+ ) -> MdtMeInfo:
+    """
+    Given an instance of an MdtMeInfo dataclass, grab each method entry address and prepare MeInfo
+    dataclass instances for each of them.
+
+    Parameters:
+        start_addr (Address): Address of the first method entry in an MDT.
+        num_of_method_entry_ref_structs (dict): Number of method entries for an MDT.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
+        current_info (MdtMeInfo): A dataclass instance which allows storage of method entry
+            information corresponding to MDTs.
+
+    Returns:
+        MdtMeInfo: The transformed dataclass instance, in which for each method entry an MeInfo
+            dataclass instance is prepared to be filled with information later.
+    """
+    for i in range(num_of_method_entry_ref_structs):
+        check_cancel()
+
+        current_method_entry_ref_field = start_addr.add(
+            i * (settings.ptr_size + 4)
+        )
+        try:
+            current_method_entry_addr = read_ptr(
+                current_method_entry_ref_field, settings.ptr_size
+            )
+        except MemoryAccessException:
+            warning(f"Could not read bytes @ {current_method_entry_ref_field}. Skipping.")
+            continue
+
+        current_info.method_entries[current_method_entry_addr] = MeInfo()
+
+    return current_info
+
+
 def traverse_mdt_top_level(
     vmt_mdt_relations: dict[Address, Address],
     settings: ArchitectureSpecificSettings,
@@ -425,49 +465,30 @@ def traverse_mdt_top_level(
         settings (dict): Architecture-specific settings including pointer size.
 
     Returns:
-        dict: A dictionary mapping each VMT address to a nested dictionary with its MDT address and
-            a list of resolved method entry addresses.
+        VmtMdtMapping: A dataclass instance mapping each VMT address to its MDT address and a list
+        of resolved method entry addresses (yet without symbolic information).
     """
-    memory_interface = currentProgram.getMemory()
-
     mapping = VmtMdtMapping()
 
+    memory_interface = currentProgram.getMemory()
+    
     for vmt_addr, mdt_addr in vmt_mdt_relations.items():
         check_cancel()
+
+        num_of_method_entry_refs_field = mdt_addr.add(2)
+        num_of_method_entry_refs = memory_interface.getShort(num_of_method_entry_refs_field)
+        if num_of_method_entry_refs == 0:
+            continue
+
         # store address information for this MDT traversal
         current_info = MdtMeInfo(mdt=mdt_addr)
 
-        # navigate to the NumOfMethodEntryRefs field
-        num_of_method_entry_ref_structs_field = mdt_addr.add(2)
-        # grab its 2B long content (architecture-independant)
-        num_of_method_entry_ref_structs = memory_interface.getShort(
-            num_of_method_entry_ref_structs_field
+        method_entry_refs_start_addr = num_of_method_entry_refs_field.add(2)
+
+        # extend current_info with method entry address information
+        current_info = get_method_entries(
+            method_entry_refs_start_addr, num_of_method_entry_refs, settings, current_info
         )
-
-        if num_of_method_entry_ref_structs == 0:
-            continue
-
-        # go to start of MethodEntryRef concatenation
-        method_entry_refs_start_addr = num_of_method_entry_ref_structs_field.add(2)
-
-        # get all starting addresses of the MDT's MethodEntries (`AddressOfMethodEntry`) and add
-        # them to a list
-        for i in range(num_of_method_entry_ref_structs):
-            check_cancel()
-            current_method_entry_ref_field = method_entry_refs_start_addr.add(
-                i * (settings.ptr_size + 4)
-            )
-            try:
-                current_method_entry_addr = read_ptr(
-                    current_method_entry_ref_field, settings.ptr_size
-                )
-            except MemoryAccessException:
-                warning(f"Could not read bytes @ {current_method_entry_ref_field}. Skipping.")
-                continue
-
-            current_info.method_entries[current_method_entry_addr] = MeInfo()
-
-        # add address information of found methodEntries to correlated MDT / VMT information
         mapping.entries[vmt_addr] = current_info
 
     return mapping
