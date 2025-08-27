@@ -152,7 +152,7 @@ def warning(msg: str) -> None:
 ###################################################################################################
 def read_ptr(addr: Address, ptr_size: int) -> Address:
     """
-    Read a pointer of the given size from memory at the specified address.
+    Read a specified address of the given size from memory.
 
     Parameters:
         addr (ghidra.program.model.address.Address): The memory address to read from.
@@ -173,30 +173,24 @@ def read_pascal_str(addr: Address) -> tuple[str, int]:
     """
     Read a Pascal-String from memory at the specified address.
 
-    The string format expects the first byte to contain the length,
-    followed by the corresponding number of characters.
+    The string format expects the first byte to contain the length, followed by the corresponding
+    characters whose number is equal to that length.
 
     Parameters:
         addr (ghidra.program.model.address.Address): The memory address where the Pascal-String
             starts.
 
     Returns:
-        tuple[str, int]: The decoded string and its total byte length (including length byte).
+        tuple[str,int]: The decoded string and its total byte length (including length byte).
     """
-    # get memory interface
-    memory = currentProgram.getMemory()
-
-    # first byte of a PascalString denotes the number of upcoming chars
-    pascal_str_len = memory.getByte(addr) & 0xFF
-
-    # the first char starts at the second byte
-    first_char_addr = addr.add(1)
-    # for storing the actual character information
     pascal_str = ""
+    
+    memory_interface = currentProgram.getMemory()
+    pascal_str_len = memory_interface.getByte(addr) & 0xFF
 
-    # iterate over the following bytes to fill the PascalString
+    first_char_addr = addr.add(1)
     for i in range(pascal_str_len):
-        pascal_str += chr(memory.getByte(first_char_addr.add(i)) & 0xFF)
+        pascal_str += chr(memory_interface.getByte(first_char_addr.add(i)) & 0xFF)
 
     return pascal_str, pascal_str_len + 1
 
@@ -219,13 +213,13 @@ class ArchitectureSpecificSettings:
 
 def get_architecture_settings() -> ArchitectureSpecificSettings:
     """
-    Return a dictionary with architecture-specific settings, including pointer size, architecture
-    specific jump distances to MDT and RTTI_Class.
+    Return a dataclass instance holding information about architecture-specific settings, including
+    pointer size and architecture specific jump distances to MDT and RTTI_Class.
 
     The text block start and end addresses are just place holders at initialization time.
 
     Returns:
-        dict: A dictionary containing architecture settings.
+        ArchitectureSpecificSettings: A dataclass instance holding architecture settings.
     """
     ptr_size = currentProgram.getDefaultPointerSize()
 
