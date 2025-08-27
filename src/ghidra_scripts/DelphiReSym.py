@@ -253,7 +253,7 @@ def get_text_section(memory: Memory) -> MemoryBlock:
 #    MAIN LOGIC - VMT RELATED                                                                     #
 ###################################################################################################
 def check_vmt_candidate(
-    candidate: Address,
+    candidate_addr: Address,
     next_struct: Address,
     settings: ArchitectureSpecificSettings,
 ) -> bool:
@@ -261,41 +261,41 @@ def check_vmt_candidate(
     Perform several sanity checks on the candidate VMT.
 
     Five fields of the VMT have been chosen for the sanity checks; three of which must always be
-    filled with valid addresses in the range of the .text section. Two of which must be as well - or
-    alternatively be NULL. As yet another sanity check, the address of the MDT must be larger than
-    the address of its VMT.
+    filled with valid addresses in the range of the .text section. Same holds true for the other two
+    fields, which alternatively can be NULL too. As yet another sanity check, the address of the
+    MDT must be larger than the address of its VMT.
 
     Parameters:
-        candidate (ghidra.program.model.address.Address): The candidate VMT's address to be
+        candidate_addr (ghidra.program.model.address.Address): The candidate VMT's address to be
             sanity-checked.
-        nextStruct (ghidra.program.model.address.Address): The value of the VMT's NextStruct field,
+        next_struct (ghidra.program.model.address.Address): The value of the VMT's NextStruct field,
             used for a sanity check.
-        settings (dict): Architecture-specific settings including pointer size, jump distance, and
-            start/end addresses of the .text block.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
         bool: Result of candidate VMT sanity checks.
     """
     ptr_size = settings.ptr_size
+    
     addresses = []
     addresses.append(next_struct)
-    mdt_addr = candidate.add(ptr_size * 6)
+
+    mdt_addr = candidate_addr.add(ptr_size * 6)
     mdt = read_ptr(mdt_addr, ptr_size)
     if mdt:
         addresses.append(mdt)
-        # it has been observed that MDTs are always located at higher addresses than their
-        # corresponding VMTs
-        if mdt <= candidate:
+        # MDTs are located at higher addresses than their corresponding VMTs
+        if mdt <= candidate_addr:
             return False
 
     # sanity check for all 10 mandatory functions at the end of the VMT in a loop
     for current_field_number in range(11, 22):
-        # exclude the optional SafeCallExceptionMethod field since it is optional
+        # exclude the SafeCallExceptionMethod field since it is the only optional one of the 10
         if current_field_number != 14:
-            current_field = candidate.add(ptr_size * current_field_number)
+            current_field = candidate_addr.add(ptr_size * current_field_number)
             addresses.append(read_ptr(current_field, ptr_size))
 
-    # check if all grabbed non-NULL address are within range of the .text section
+    # returns True if all grabbed addresses are within range of the .text section
     return all(
         settings.text_block_start_addr
         <= addr
