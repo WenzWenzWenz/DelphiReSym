@@ -70,11 +70,6 @@ VERBOSE_INFO = True
 # set whether or not to print warning information to stdout
 VERBOSE_WARNING = False
 
-# set these variables to specific hexadecimal address strings to narrow the analysed address range,
-# e.g.: STARTADDR = "005c12dc"
-STARTADDR = None
-ENDADDR = None
-
 # TODO: work on: non exhaustive list of non-RTTI dependant types and make this feature toggleable
 data_type_mapping = {
     "Boolean": BooleanDataType,
@@ -325,13 +320,6 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list:
     Returns:
         list[Address]: A list of addresses likely representing VMTs.
     """
-
-    # if constants are set, this manipulates the analysed address range, instead of analysing the
-    # entire .text section
-    if STARTADDR:
-        settings.text_block_start_addr = settings.text_block_start_addr.getAddress(STARTADDR)
-    if ENDADDR:
-        settings.text_block_end_addr = settings.text_block_end_addr.getAddress(ENDADDR)
 
     text_block_size = settings.text_block_end_addr.subtract(settings.text_block_start_addr)
 
