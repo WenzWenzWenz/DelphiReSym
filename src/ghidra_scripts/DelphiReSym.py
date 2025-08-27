@@ -978,12 +978,10 @@ def main() -> None:
     vmt_addresses = find_vmts(settings)
 
     info("[2/8] Grabbing the MDT of every found VMT...")
-    vmt_mdt_relations = get_vmt_field_addresses(vmt_addresses, settings, settings.mdt_offset, "MDT")
+    vmt_mdt_relations = get_vmt_field_addresses(vmt_addresses, settings, settings.mdt_offset)
 
     info("[3/8] Grabbing the RTTI_Class of every found VMT...")
-    vmt_rtti_relations = get_vmt_field_addresses(
-        vmt_addresses, settings, settings.rtti_offset, "VmtRtti"
-    )
+    vmt_rtti_relations = get_vmt_field_addresses(vmt_addresses, settings, settings.rtti_offset)
 
     # find all starting addresses of all MethodEntry substructures of every MDT
     # the result is structured as follows:
