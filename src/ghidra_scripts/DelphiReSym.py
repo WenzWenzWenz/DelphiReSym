@@ -62,8 +62,6 @@ def check_cancel():
 #    CONFIGS'n'CONSTANTS                                                                          #
 ###################################################################################################
 # set whether or not to print detailed debug information to stdout
-VERBOSE_DETAIL = False
-# set whether or not to print detailed debug information to stdout
 VERBOSE_DEBUG = False
 # set whether or not to print less detailed debug information to stdout
 VERBOSE_INFO = True
@@ -98,17 +96,6 @@ data_type_mapping = {
 ###################################################################################################
 #    PRINTING'n'LOGGING                                                                           #
 ###################################################################################################
-def detail(msg: str) -> None:
-    """
-    Print a detailed debug message if VERBOSE_DETAIL is True.
-
-    Parameters:
-        msg (str): The debug message to print.
-    """
-    if VERBOSE_DETAIL:
-        print(f"[DETAIL] {msg}")
-
-
 def debug(msg: str) -> None:
     """
     Print a debug message if VERBOSE_DEBUG is True.
@@ -376,9 +363,8 @@ def get_vmt_field_addresses(
 
     for vmt_addr in vmt_addresses:
         check_cancel()
-        # compute address where the field's pointer lies
+
         field_addr = vmt_addr.add(offset)
-        debug(f"Pointer to {debug_name} @ {field_addr}")
         try:
             field_val = read_ptr(field_addr, settings.ptr_size)
         except MemoryAccessException:
@@ -840,7 +826,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
     apply_count = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "paramSet": 0}
 
     for vmt, mdt_me_info in all_symbol_info.entries.items():
-        detail(f"[7/8] Currently proceessing symbol information for VMT @ {vmt} ...")
+        debug(f"[7/8] Currently proceessing symbol information for VMT @ {vmt} ...")
         apply_count["vmt"] += 1
 
         # get namespace information from ghidra's symbol table or create it if required
@@ -886,7 +872,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
             if namespace is not None:
                 try:
                     function.setParentNamespace(namespace)
-                    detail(
+                    debug(
                         f"Successfully applied FQN {namespace}::{func_name} function @ "
                         f"{func_entry_point}."
                     )
@@ -908,7 +894,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
                 # replace return type
                 function.setReturnType(final_data_type, SourceType.USER_DEFINED)
 
-                detail(
+                debug(
                     f"Successfully applied return type {ret_type_str} to function "
                     f"@ {func_entry_point}."
                 )
