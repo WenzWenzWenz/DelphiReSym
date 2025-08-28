@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, cast, Optional, Any
 from dataclasses import dataclass, field
 if TYPE_CHECKING:
     from ghidra.ghidra_builtins import *                                        # type: ignore
-from ghidra.program.model.data import *                                         # type: ignore
 from ghidra.program.model.symbol import SourceType, Namespace                   # type: ignore
 from ghidra.program.model.listing import ParameterImpl, Function, Program       # type: ignore
 from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock # type: ignore
@@ -30,6 +29,21 @@ from ghidra.program.model.data import (                                         
     CharDataType,
     StructureDataType,
 )
+from ghidra.program.model.data import (                                         # type: ignore
+    DataType,
+    PointerDataType,
+    BooleanDataType,
+    VoidDataType,
+    DoubleDataType,
+    IntegerDataType,
+    ShortDataType,
+    PointerDataType,
+    CharDataType,
+    UnsignedIntegerDataType,
+    ByteDataType,
+    CategoryPath,
+)
+
 
 # this global variable is currently used for debugging purposes only
 types = set()
