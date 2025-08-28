@@ -324,7 +324,7 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
         settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
-        list[Address]: A list of addresses of candidate VMTs.
+        list[Address]: A list of addresses of VMTs.
     """
     vmt_addresses = []
 
@@ -1021,50 +1021,24 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
 ###################################################################################################
 #    MAIN LOGIC - ACTUAL MAIN                                                                     #
 ###################################################################################################
-def main() -> None:
+def print_final_stats(
+    original_function_count: int,
+    total_function_count: int,
+    vmt_addresses: list[Address],
+    recovery_counts: dict[str, int],
+) -> None:
     """
-    Main function orchestrating the analysis and recovery of symbol and RTTI information from an
-    executable's VMTs and MDTs within Ghidra.
+    Print after-execution-statistics, including function counts, VMT counts and percentages of
+    recovered symbolic information.
+
+    Parameters:
+        original_function_count (int): The number of functions as detected by the Ghidra API at the
+            start of execution.
+        total_function_count (int): The number of functions as detected by the Ghidra API after
+            the execution of symbol recovery.
+        vmt_addresses (list[Address]): The list of addresses of VMTs previously detected.
+        recovery_counts (dict[str, int]): A dictionary holding several statistical data.
     """
-    original_function_count = currentProgram.getFunctionManager().getFunctionCount()
-
-    memory_interface = currentProgram.getMemory()
-    text_section = get_text_section(memory_interface)
-    settings = get_architecture_settings(text_section)
-
-    # print more general information
-    print(f"|> Size of .text section: {text_section.getSizeAsBigInteger()}")
-
-    info("[1/8] Starting to scan for candidate VMTs & performing sanity checks...")
-    vmt_addresses = find_vmts(settings)
-
-    info("[2/8] Grabbing the MDT of every found VMT...")
-    vmt_mdt_relations = get_vmt_field_addresses(vmt_addresses, settings, settings.mdt_offset)
-
-    info("[3/8] Grabbing the RTTI_Class of every found VMT...")
-    vmt_rtti_relations = get_vmt_field_addresses(vmt_addresses, settings, settings.rtti_offset)
-
-    # find all starting addresses of all MethodEntry substructures of every MDT
-    # the result is structured as follows:
-    # {<vmtAddr>: {"mdt": <mdtAddress>, "methodEntries":[<methodEntry1Addr>, <methodEntry2Addr>,
-    # ...]}}
-    info("[4/8] Grabbing the MethodEntries of every found MDT...")
-    vmt_mdt_top_level = traverse_mdt_top_level(vmt_mdt_relations, settings)
-
-    # entlang der MDT Struktur entlang hangeln, um relevante Daten zu erhalten.
-    info("[5/8] Extracting information of all MethodEntries of every found MDT...")
-    vmt_mdt_symbols = traverse_method_entries(vmt_mdt_top_level, settings)
-
-    # complete symbol recovery information by calling traverseRttiClass(addr, settings) for all VMTs
-    info("[6/8] Extracting the RTTI namespaces for every VMT/MDT...")
-    all_symbols = add_namespace_information(vmt_rtti_relations, vmt_mdt_symbols, settings)
-
-    # apply symbol name recovery
-    info("[7/8] Reconstructing all symbol names...")
-    recovery_counts = apply_symbols(all_symbols)
-
-    # print final statistics
-    total_function_count = currentProgram.getFunctionManager().getFunctionCount()
     info(f"[8/8] Statistics: Pre-execution number of functions: {original_function_count}")
     info(f"[8/8] Statistics: Post-execution number of functions: {total_function_count}")
     info(f"[8/8] Statistics: Number of VMTs found: {len(vmt_addresses)}")
@@ -1096,6 +1070,44 @@ def main() -> None:
         f"or {recovery_counts['paramSet']/original_function_count*100:.2f}% when using "
         "pre-execution function count."
     )
+    
+    return
+
+
+def main() -> None:
+    """
+    Main function orchestrating the analysis and recovery of symbolic information from an
+    executable's VMTs, MDTs and RTTI_Classes.
+    """
+    original_function_count = currentProgram.getFunctionManager().getFunctionCount()
+
+    memory_interface = currentProgram.getMemory()
+    text_section = get_text_section(memory_interface)
+    settings = get_architecture_settings(text_section)
+
+    info("[1/8] Starting to scan for candidate VMTs & performing sanity checks...")
+    vmt_addresses = find_vmts(settings)
+
+    info("[2/8] Grabbing the MDT of every found VMT...")
+    vmt_mdt_relations = get_vmt_field_addresses(vmt_addresses, settings, settings.mdt_offset)
+
+    info("[3/8] Grabbing the RTTI_Class of every found VMT...")
+    vmt_rtti_relations = get_vmt_field_addresses(vmt_addresses, settings, settings.rtti_offset)
+
+    info("[4/8] Grabbing the MethodEntries of every found MDT...")
+    vmt_mdt_top_level = traverse_mdt_top_level(vmt_mdt_relations, settings)
+
+    info("[5/8] Extracting information of all MethodEntries of every found MDT...")
+    vmt_mdt_symbols = traverse_method_entries(vmt_mdt_top_level, settings)
+
+    info("[6/8] Extracting the RTTI namespaces for every VMT/MDT...")
+    all_symbols = add_namespace_information(vmt_rtti_relations, vmt_mdt_symbols, settings)
+
+    info("[7/8] Reconstructing all symbol names...")
+    recovery_counts = apply_symbols(all_symbols)
+
+    total_function_count = currentProgram.getFunctionManager().getFunctionCount()
+    print_final_stats(original_function_count, total_function_count, vmt_addresses, recovery_counts)
     info("[8/8] Finished.")
 
     # the following two lines are for debugging purposes only
