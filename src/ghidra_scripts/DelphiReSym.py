@@ -468,7 +468,7 @@ def traverse_mdt_top_level(
 
     Parameters:
         vmt_mdt_relations (dict): Mapping of VMT addresses to their MDT addresses.
-        settings (dict): Architecture-specific settings including pointer size.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
         VmtMdtMapping: A dataclass instance mapping each VMT address to its MDT address and a list
@@ -516,11 +516,11 @@ def traverse_param_entries(
         first_param_entry_addr (ghidra.program.model.address.Address): Starting address of the first
             ParamEntry.
         num_of_param_entries (int): Number of ParamEntries to process.
-        settings (dict): Architecture-specific settings including pointer size.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
-        dict: Mapping from each ParamEntry's address to a dictionary containing the parameter's RTTI
-            address, name, and namespace.
+        dict[ghidra.program.model.address.Address,ParamInfo]: Mapping from each ParamEntry's address
+            to a dictionary containing the parameter's RTTI address, name, and namespace.
     """
     param_entries_info = {}
 
@@ -528,7 +528,7 @@ def traverse_param_entries(
 
     for _ in range(num_of_param_entries):
         check_cancel()
-    
+
         # grab information
         param_entry_addr = current_addr
         try:
@@ -539,7 +539,7 @@ def traverse_param_entries(
             rtti_namespace = None
         param_name_addr = current_addr.add(settings.ptr_size + 2)
         param_name, str_len = read_pascal_str(param_name_addr)
-        
+
         # store information
         param_entries_info[param_entry_addr] = ParamInfo(
             rtti_addr=rtti, param_name=param_name, rtti_namespace=rtti_namespace
@@ -549,6 +549,117 @@ def traverse_param_entries(
         current_addr = param_name_addr.add(str_len + 3)
 
     return param_entries_info
+
+
+def extract_func_entry_point(
+    method_entry_addr: Address, settings: ArchitectureSpecificSettings
+) -> Address:
+    """
+    Extract the address of a function entry point given a specific MethodEntry address.
+
+    Parameters:
+        method_entry_addr (ghidra.program.model.address.Address): Starting address of MethodEntry.
+        settings (dict): Architecture-specific settings including pointer size.
+
+    Returns:
+        ghidra.program.model.address.Address: The address of the extracted function entry point.
+    """
+    function_def_addr_field = method_entry_addr.add(2)
+    return read_ptr(function_def_addr_field, settings.ptr_size)
+
+
+def extract_func_name(
+    method_entry_addr: Address, settings: ArchitectureSpecificSettings
+) -> tuple[str, int] | tuple[None, None]:
+    """
+    Extract the name of a function given a specific MethodEntry address.
+
+    Parameters:
+        method_entry_addr (ghidra.program.model.address.Address): Starting address of MethodEntry.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
+
+    Returns:
+        tuple(str,int): The name of the function as a String and its length.
+    """
+    name_of_function_addr = method_entry_addr.add(settings.ptr_size + 2)
+    try:
+        func_name, str_len = read_pascal_str(name_of_function_addr)
+        return func_name, str_len
+    except MemoryAccessException:
+        warning(f"Grab of nameOfFunctionAddr failed. Skipping ME: {method_entry_addr}.")
+        return None, None
+
+
+def extract_ret_type(
+    method_entry_addr: Address, func_name_len: int, settings: ArchitectureSpecificSettings
+) -> tuple[Address, str] | tuple[None, None]:
+    """
+    Extract the return type of a function given a specific MethodEntry address.
+
+    Parameters:
+        method_entry_addr (ghidra.program.model.address.Address): Starting address of MethodEntry.
+        func_name_len (int): The length of the function name preceeding the return type information.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
+
+    Returns:
+        tuple(ghidra.program.model.address.Address,str): The address of the RTTI return type and its
+            String represenation (=return type name).
+    """
+    all_zero_addr = convert_to_addr("0x0")
+
+    ret_type_addr_field = method_entry_addr.add(func_name_len + settings.ptr_size + 4)
+    try:
+        dereferenced_ret_type_addr = read_ptr(ret_type_addr_field, settings.ptr_size)
+        ret_type_at = dereferenced_ret_type_addr
+        
+        if dereferenced_ret_type_addr == all_zero_addr:
+            return ret_type_at, "void"
+        
+        doubly_dereferenced_ret_type_addr = read_ptr(
+            dereferenced_ret_type_addr, settings.ptr_size
+        )
+        ret_type_str = traverse_rtti_object(
+            doubly_dereferenced_ret_type_addr, settings
+        )
+    except MemoryAccessException:
+        warning(
+            warning(f"Read of return type failed. Skipping ME: {method_entry_addr}.")
+        )
+        return None, None
+
+    return ret_type_at, ret_type_str
+
+
+def extract_parameters(
+    method_entry_addr: Address, func_name_len: int, settings: ArchitectureSpecificSettings
+) -> dict[Address, ParamInfo] | None:
+    """
+    Extract the parameter information of a function given a specific MethodEntry address.
+
+    Parameters:
+        method_entry_addr (ghidra.program.model.address.Address): Starting address of MethodEntry.
+        func_name_len (int): The length of the function name preceeding the return type information.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
+
+    Returns:
+        dict[ghidra.program.model.address.Address,ParamInfo]: Mapping from each ParamEntry's address
+            to a dictionary containing the parameter's RTTI address, name, and namespace.
+    """
+    memory_interface = currentProgram.getMemory()
+
+    num_of_param_entries_field = method_entry_addr.add(func_name_len + 2 * settings.ptr_size + 6)
+    num_of_param_entries = memory_interface.getByte(num_of_param_entries_field) & 0xFF
+
+    first_param_entry_field = num_of_param_entries_field.add(2)
+    # address outside the .text section => false positive
+    if not (
+        settings.text_block_start_addr
+        <= first_param_entry_field
+        <= settings.text_block_end_addr
+    ):
+        return None
+
+    return traverse_param_entries(first_param_entry_field, num_of_param_entries, settings)
 
 
 def traverse_method_entries(
@@ -562,105 +673,61 @@ def traverse_method_entries(
     RTTI information, and associated parameter entries. If any critical part cannot be dereferenced
     or lies outside of the executable section, the corresponding VMT is discarded from the final
     result.
+
+    Parameters:
+        vmt_mdt_top_info (VmtMdtMapping): A dataclass instance holding information about VMT-MDT-ME
+            mapping.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
+
+    Returns:
+        VmtMdtMapping: First argument with now filled-in symbolic information concerning MDTs.
     """
-    # regrab memory interface
-    memory = currentProgram.getMemory()
-
-    # the zero-address for reusability
-    all_zero_addr = convert_to_addr("0x0")
-
-    # iterate over all MethodEntries of each VMT's MDT; by creating a new list, we can change the
-    # size of the underlying dictionary during runtime
+    # iterate over all MethodEntries of each VMT's MDT
     for vmt, mdt_me_info in list(vmt_mdt_top_info.entries.items()):
-        # # store information about relevant fields for each MethodEntry of an MDT
+
         method_entries_info = mdt_me_info
-        # maybe i just need some shallow references though
-        # method_entries_info = deepcopy(mdt_me_info)
 
-        for method_entry_at in mdt_me_info.method_entries.keys():
+        for method_entry_addr in mdt_me_info.method_entries.keys():
             check_cancel()
-            # dictionary to hold relevant information for a single MethodEntry
-            method_entry_info = MeInfo()
 
-            # grab entry point of the MethodEntry's function definition
             try:
-                function_def_addr_field = method_entry_at.add(2)
+                func_entry_point = extract_func_entry_point(method_entry_addr, settings)
+            except MemoryAccessException:
+                warning(f"Read of func entry point failed. Skipping ME: {method_entry_addr}.")
+                continue
+            # Delphi executables often contain a large concatenation of addresses at the very
+            # end of the .text section -> falsely detected as a valid VMT
             except AddressOutOfBoundsException:
-                # this error can happen when a huge concatenation of addresses structure is falsely
-                # detected as a VMT, hence, ignore its method entries
                 break
-            try:
-                method_entry_info.func_entry_point = read_ptr(
-                    function_def_addr_field, settings.ptr_size
-                )
-            except MemoryAccessException:
-                warning(
-                    f"Could not read bytes @ {function_def_addr_field}. Skipping methodEntry: "
-                    f"{method_entry_at}."
-                )
+
+            func_name, func_name_len = extract_func_name(method_entry_addr, settings)
+            if not func_name:
                 continue
 
-            # grab the corresponding function name
-            name_of_function_addr = function_def_addr_field.add(settings.ptr_size)
-            try:
-                method_entry_info.func_name, strLen = read_pascal_str(name_of_function_addr)
-            except MemoryAccessException:
-                warning(
-                    f"Couldn't grab nameOfFunctionAddr: {name_of_function_addr}. Skipping "
-                    f"methodEntry: {method_entry_at}."
-                )
+            ret_type_addr, ret_type_str = extract_ret_type(method_entry_addr, func_name_len, settings)
+            if not (ret_type_addr or ret_type_str):
                 continue
 
-            # grab information about return type's RTTI class
-            ret_type_addr_field = name_of_function_addr.add(strLen + 2)
-            try:
-                dereferenced_ret_type_addr = read_ptr(ret_type_addr_field, settings.ptr_size)
-                # if all zero'd, void is the return type
-                if dereferenced_ret_type_addr != all_zero_addr:
-                    method_entry_info.ret_type_at = dereferenced_ret_type_addr
-                    doubly_dereferenced_ret_type_addr = read_ptr(
-                        dereferenced_ret_type_addr, settings.ptr_size
-                    )
-                    method_entry_info.ret_type_str = traverse_rtti_object(
-                        doubly_dereferenced_ret_type_addr, settings
-                    )
-            except MemoryAccessException:
-                warning(f"Could not read bytes @ {ret_type_addr_field}. Skipping.")
-                continue
-
-            # get NumOfParamEntries
-            num_of_param_entries_field = ret_type_addr_field.add(settings.ptr_size + 2)
-            num_of_param_entries = memory.getByte(num_of_param_entries_field) & 0xFF
-
-            # go to first ParamEntry substructure
-            first_param_entry_field = num_of_param_entries_field.add(2)
-
-            # sanity check for the ParamEntries: check if potential ParamEntries are within .text
-            # section
-            if not (
-                settings.text_block_start_addr
-                <= first_param_entry_field
-                <= settings.text_block_end_addr
-            ):
-                # addresses outside the .text section mean false positive ParamEntries, hence remove
-                # them
+            params = extract_parameters(method_entry_addr, func_name_len, settings)
+            if not params:
                 del vmt_mdt_top_info.entries[vmt]
                 break
 
-            # get information about position and names of the specific MethodEntry's parameters
-            method_entry_info.param_entries = traverse_param_entries(
-                first_param_entry_field, num_of_param_entries, settings
+            # store gathered information
+            method_entry_info = MeInfo(
+                func_entry_point=func_entry_point,
+                func_name=func_name,
+                ret_type_at=ret_type_addr,
+                ret_type_str=ret_type_str,
+                param_entries=params,
             )
+            method_entries_info.method_entries[method_entry_addr] = method_entry_info
 
-            # store information to the dictionary holding data for all MethodEntries of an MDT
-            method_entries_info.method_entries[method_entry_at] = method_entry_info
-
-        # the else clause only triggers, if the inner loops break didn't trigger
+        # store information only if the loop didn't break (= all MethodEntries of MDT are valid)
         else:
-            # store information to the dictionary holding all data
             vmt_mdt_top_info.entries[vmt] = method_entries_info
 
-    debug(f"Dictionary information after traverseMethodEntries(): {vmt_mdt_top_info}")
+    debug(f"Symbolic information after traverse_method_entries(): {vmt_mdt_top_info}")
     return vmt_mdt_top_info
 
 
