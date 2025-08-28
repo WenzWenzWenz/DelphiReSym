@@ -778,27 +778,28 @@ def add_namespace_information(
     vmt_rtti_relations: dict, symbol_info: VmtMdtMapping, settings: dict
 ) -> VmtMdtMapping:
     """
-    Augment symbol information with the namespace string derived via RTTI traversal. It ensures
-    consistency with any VMTs previously filtered out.
+    Augment symbol information with the namespace string derived via RTTI traversal. The function
+    ensures consistency with any VMTs previously filtered out.
 
     Parameters:
         vmtRttiRelations (dict): Mapping of VMT addresses to RTTI addresses.
-        symbolInfo (dict): Dictionary holding previously gathered metadata.
-        settings (dict): Architecture-specific configuration settings.
+        symbolInfo (VmtMdtMapping): Dataclass instance holding all previously gathered metadata.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
-        dict: Updated symbolInfo dictionary with added `namespace` fields.
+        VmtMdtMapping: Dataclass instance holding previously gathered metadata, including freshly
+            added RTTI namespace information.
     """
     for vmt, rtti in vmt_rtti_relations.items():
         check_cancel()
-        # if during traverseMethodEntries() a vmt had been removed, take this change into effect
-        # here as well
+        
+        # can happen if a VMT was removed during traverseMethodEntries()
         if vmt not in symbol_info.entries:
             continue
 
         symbol_info.entries[vmt].namespace = traverse_rtti_object(rtti, settings)
 
-    debug(f"Final dictionary information: {symbol_info}")
+    debug(f"Final dictionary information after add_namespace_information(): {symbol_info}")
     return symbol_info
 
 
