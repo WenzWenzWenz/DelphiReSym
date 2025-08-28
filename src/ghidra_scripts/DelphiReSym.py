@@ -855,47 +855,41 @@ def prepare_namespace(namespace_str: str) -> Namespace:
 
 def prepare_data_type(type_string: str) -> DataType:
     """
-    Returns the datatype concerning a string argument - either by mapping to a ghidra built-in
+    Returns the datatype concerning a string argument - either by casting it to a ghidra built-in
     datatype or by building the namespace of the RTTI type.
 
     Parameters:
         typeString (str): A string representing the datatype which shall be returned accordingly.
 
     Returns:
-        DataType: The datatype object, either built by a constructor or a ghidra built-in datatype.
+        ghidra.program.model.data.DataType: The datatype object, either built by a constructor or a
+            Ghidra built-in datatype.
     """
+    global data_type_mapping
     data_types = currentProgram.getDataTypeManager()
 
-    # the following three lines are currently used for debugging purposes only
-    global data_type_mapping
+    # TODO: remove later, debugging purposes only
     if "." not in type_string:
         types.add(type_string)
 
     if type_string in data_type_mapping:
-        # return mapped ghidra built-in datatype if it's a simple datatype
+        # ghidra built-in simple datatypes
         final_data_type = data_type_mapping[type_string]()
     else:
-        # define the class name and namespace
+        # create datatype
         param_namespace = prepare_namespace(type_string)
-        param_class_name = type_string.split(".")[-1].rstrip(">")
+        param_class_name = type_string.split(".")[-1].rstrip(">")  # TODO fix this problem
 
-        # create a class in the given namespace via the light-weight FlatProgramAPI function
         try:
             createClass(param_namespace, param_class_name)
         except DuplicateNameException:
             pass
 
-        # create a categorypath and the actual datatype
         category_path = CategoryPath(
             "/" + param_namespace.getParentNamespace().getName(True).replace("::", "/")
-        )  # → /Vcl/Forms
+        )
         data_type = StructureDataType(category_path, param_class_name, 0)
-
-        # register the datatype with the DataTypeManager
         registered_data_type = data_types.addDataType(data_type, None)
-
-        # create a pointer to the class (Delphi typically passes/returns class instances as
-        # pointers) and return it
         final_data_type = PointerDataType(registered_data_type)
 
     return final_data_type
