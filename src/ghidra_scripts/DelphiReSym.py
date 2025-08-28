@@ -69,7 +69,7 @@ class MonitorCancel(BaseException):
 
 def check_cancel():
     """
-    This enables Ghidra-GUI's "Cancel" button to actually stop the execution. 
+    This enables Ghidra-GUI's "Cancel" button to actually stop the execution.
     """
     if monitor.isCancelled():
         raise MonitorCancel
@@ -434,7 +434,7 @@ def get_method_entries(
     num_of_method_entry_refs: int,
     settings: ArchitectureSpecificSettings,
     info: MdtMeInfo,
- ) -> MdtMeInfo:
+) -> MdtMeInfo:
     """
     Given an instance of an MdtMeInfo dataclass, grab each method entry address and prepare MeInfo
     dataclass instances for each of them.
@@ -453,13 +453,9 @@ def get_method_entries(
     for i in range(num_of_method_entry_refs):
         check_cancel()
 
-        current_method_entry_ref_field = start_addr.add(
-            i * (settings.ptr_size + 4)
-        )
+        current_method_entry_ref_field = start_addr.add(i * (settings.ptr_size + 4))
         try:
-            current_method_entry_addr = read_ptr(
-                current_method_entry_ref_field, settings.ptr_size
-            )
+            current_method_entry_addr = read_ptr(current_method_entry_ref_field, settings.ptr_size)
         except MemoryAccessException:
             warning(f"Could not read bytes @ {current_method_entry_ref_field}. Skipping.")
             continue
@@ -628,17 +624,11 @@ def extract_ret_type(
         
         if dereferenced_ret_type_addr == all_zero_addr:
             return ret_type_at, "void"
-        
-        doubly_dereferenced_ret_type_addr = read_ptr(
-            dereferenced_ret_type_addr, settings.ptr_size
-        )
-        ret_type_str = traverse_rtti_object(
-            doubly_dereferenced_ret_type_addr, settings
-        )
+
+        doubly_dereferenced_ret_type_addr = read_ptr(dereferenced_ret_type_addr, settings.ptr_size)
+        ret_type_str = traverse_rtti_object(doubly_dereferenced_ret_type_addr, settings)
     except MemoryAccessException:
-        warning(
-            warning(f"Read of return type failed. Skipping ME: {method_entry_addr}.")
-        )
+        warning(warning(f"Read of return type failed. Skipping ME: {method_entry_addr}."))
         return None, None
 
     return ret_type_at, ret_type_str
@@ -667,9 +657,7 @@ def extract_parameters(
     first_param_entry_field = num_of_param_entries_field.add(2)
     # address outside the .text section => false positive
     if not (
-        settings.text_block_start_addr
-        <= first_param_entry_field
-        <= settings.text_block_end_addr
+        settings.text_block_start_addr <= first_param_entry_field <= settings.text_block_end_addr
     ):
         return None
 
@@ -718,7 +706,9 @@ def traverse_method_entries(
             if not func_name:
                 continue
 
-            ret_type_addr, ret_type_str = extract_ret_type(method_entry_addr, func_name_len, settings)
+            ret_type_addr, ret_type_str = extract_ret_type(
+                method_entry_addr, func_name_len, settings
+            )
             if not (ret_type_addr or ret_type_str):
                 continue
 
@@ -903,7 +893,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
     like its name, parameter and return types and parameter names.
 
     Parameters:
-        allSymbolInfo (dict): Dictionary holding previously gathered metadata.
+        allSymbolInfo (VmtMdtMapping): Dataclass instance holding all previously gathered metadata.
 
     Returns:
         dict: Counts the numbers of VMTs, function names, and FQNs which have been fully recovered.
