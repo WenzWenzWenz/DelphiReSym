@@ -823,19 +823,12 @@ def prepare_namespace(namespace_str: str) -> Namespace:
         ghidra.program.model.symbol.Namespace: The final Namespace object corresponding to the
             deepest namespace level.
     """
-    # grab ghidra's symbol table
     symbol_table = currentProgram.getSymbolTable()
-    # split the namespace string at the first '.' character, returning a list of its parts
-    namespace_parts = namespace_str.split(".")
-
-    # start from the root namespace and iteratively grab or create its children
     parent_namespace = currentProgram.getGlobalNamespace()
+    
+    namespace_parts = namespace_str.split(".")
     for part in namespace_parts:
         check_cancel()
-        # look for an existing namespace with this name under the current parent or create it if
-        # needed
-        # remark: USER_DEFINED makes sure that later on, the information will not be overwritten by
-        # ghidra
         try:
             parent_namespace = symbol_table.getOrCreateNameSpace(
                 parent_namespace, part, SourceType.USER_DEFINED
@@ -843,7 +836,6 @@ def prepare_namespace(namespace_str: str) -> Namespace:
         except InvalidInputException:
             return None
 
-    # return the final namespace object (e.g., TApplication)
     return parent_namespace
 
 
