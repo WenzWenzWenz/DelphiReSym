@@ -734,9 +734,10 @@ def traverse_method_entries(
 ###################################################################################################
 #    MAIN LOGIC - RTTI_CLASS RELATED                                                              #
 ###################################################################################################
-def traverse_rtti_object(addr: Address, settings: dict) -> str | None:
+def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) -> str | None:
     """
     Traverse a Delphi RTTI object and extract string information based on its magic byte.
+
     If the RTTI object is an RTTI_Class (0x07), its object name and namespace get returned, i.e.
     `Namespace.ClassName`.
     If the RTTI object is of any other RTTI object type, only the object's name gets returned, as
@@ -745,37 +746,29 @@ def traverse_rtti_object(addr: Address, settings: dict) -> str | None:
     Parameters:
         addr (ghidra.program.model.address.Address): The address pointing to the beginning of a
             potential RTTI object.
-        settings (dict): Architecture-specific settings including pointer size.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
         str|None: Namespace of the RTTI_Class's VMT as a string, or the the RTTI object's name
             (if it's not an RTTI_Class), or None if the structure is invalid.
     """
-    # regrab memory interface
-    memory = currentProgram.getMemory()
-    magic_byte = memory.getByte(addr) & 0xFF
+    memory_interface = currentProgram.getMemory()
+    magic_byte = memory_interface.getByte(addr) & 0xFF
 
     if magic_byte > 0x15:
-        warning(
-            f"Tried to traverse data @ {addr}, but it's not an RTTI object! Skipping traversal."
-        )
+        warning(f"Tried to traverse data @{addr}, but it's not an RTTI object! Skipping.")
         return None
 
-    # go to RttiObjectName field
     rtti_object_name_field = addr.add(1)
-    # read Pascal String to get name of the RTTI object
     rtti_object_name, str_len = read_pascal_str(rtti_object_name_field)
 
-    # if the traversed object is not of type RTTI_Class, only return its name as information
+    # not of type RTTI_Class
     if magic_byte != 0x07:
         return rtti_object_name
 
-    # go to RttiNamespace field
-    rtti_namespace_field = rtti_object_name_field.add(str_len + settings.ptr_size * 2 + 2)
-    # read Pascal String to get the namespace of the RTTI_Class
+    rtti_namespace_field = rtti_object_name_field.add(str_len + 2 * settings.ptr_size + 2)
     rtti_namespace, _ = read_pascal_str(rtti_namespace_field)
 
-    # construct namespace from the PoV of a function in Delphi style (not yet C++!)
     namespace = rtti_namespace + "." + rtti_object_name
 
     return namespace
