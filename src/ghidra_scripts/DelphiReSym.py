@@ -810,6 +810,24 @@ def add_namespace_information(
 ###################################################################################################
 #    MAIN LOGIC - TRANSFORMATION FUNCTIONS                                                        #
 ###################################################################################################
+def parse_namespace(namespace_str: str):
+    bracket_counter = 0
+    last_part_start = 0
+    for k, token in enumerate(namespace_str):
+        if token == "<":
+            bracket_counter += 1
+            continue
+        if token == ">":
+            if bracket_counter <=0:
+                raise RuntimeError(f"Invalid namespace: {namespace_str}")
+            bracket_counter -= 1
+        if token == ".":
+            if bracket_counter == 0:
+                yield namespace_str[last_part_start:k]
+                last_part_start = k + 1
+    yield namespace_str[last_part_start:]
+
+
 def prepare_namespace(namespace_str: str) -> Namespace:
     """
     Create or retrieve a nested namespace hierarchy in Ghidra's symbol table from a namespace
@@ -829,9 +847,8 @@ def prepare_namespace(namespace_str: str) -> Namespace:
     """
     symbol_table = currentProgram.getSymbolTable()
     parent_namespace = currentProgram.getGlobalNamespace()
-    
-    namespace_parts = namespace_str.split(".")
-    for part in namespace_parts:
+
+    for part in parse_namespace(namespace_str):
         check_cancel()
         try:
             parent_namespace = symbol_table.getOrCreateNameSpace(
