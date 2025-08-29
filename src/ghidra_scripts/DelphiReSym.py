@@ -168,7 +168,7 @@ def read_ptr(addr: Address, ptr_size: int) -> Address:
     )
 
 
-def read_pascal_str(addr: Address) -> tuple[str, int]:
+def read_pascal_str(addr: Address) -> str:
     """
     Read a Pascal-String from memory at the specified address.
 
@@ -180,7 +180,7 @@ def read_pascal_str(addr: Address) -> tuple[str, int]:
             starts.
 
     Returns:
-        tuple[str,int]: The decoded string and its total byte length (including length byte).
+        str: The decoded string.
     """
     pascal_str = ""
     
@@ -191,7 +191,7 @@ def read_pascal_str(addr: Address) -> tuple[str, int]:
     for i in range(pascal_str_len):
         pascal_str += chr(memory_interface.getByte(first_char_addr.add(i)) & 0xFF)
 
-    return pascal_str, pascal_str_len + 1
+    return pascal_str
 
 
 @dataclass
@@ -548,7 +548,7 @@ def traverse_param_entries(
             rtti = None
             rtti_namespace = None
         param_name_addr = current_addr.add(settings.ptr_size + 2)
-        param_name, str_len = read_pascal_str(param_name_addr)
+        param_name = read_pascal_str(param_name_addr)
 
         # store information
         param_entries_info[param_entry_addr] = ParamInfo(
@@ -556,7 +556,7 @@ def traverse_param_entries(
         )
 
         # next ParamEntry
-        current_addr = param_name_addr.add(str_len + 3)
+        current_addr = param_name_addr.add(len(param_name) + 1 + 3)
 
     return param_entries_info
 
@@ -580,7 +580,7 @@ def extract_func_entry_point(
 
 def extract_func_name(
     method_entry_addr: Address, settings: ArchitectureSpecificSettings
-) -> tuple[str, int] | tuple[None, None]:
+) -> str | None:
     """
     Extract the name of a function given a specific MethodEntry address.
 
@@ -589,15 +589,15 @@ def extract_func_name(
         settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
-        tuple(str,int): The name of the function as a String and its length.
+        str: The name of the function as a String and its length.
     """
     name_of_function_addr = method_entry_addr.add(settings.ptr_size + 2)
     try:
-        func_name, str_len = read_pascal_str(name_of_function_addr)
-        return func_name, str_len
+        func_name = read_pascal_str(name_of_function_addr)
+        return func_name
     except MemoryAccessException:
         warning(f"Grab of nameOfFunctionAddr failed. Skipping ME: {method_entry_addr}.")
-        return None, None
+        return None
 
 
 def extract_ret_type(
@@ -702,17 +702,17 @@ def traverse_method_entries(
             except AddressOutOfBoundsException:
                 break
 
-            func_name, func_name_len = extract_func_name(method_entry_addr, settings)
+            func_name = extract_func_name(method_entry_addr, settings)
             if not func_name:
                 continue
 
             ret_type_addr, ret_type_str = extract_ret_type(
-                method_entry_addr, func_name_len, settings
+                method_entry_addr, len(func_name) + 1, settings
             )
             if not (ret_type_addr or ret_type_str):
                 continue
 
-            params = extract_parameters(method_entry_addr, func_name_len, settings)
+            params = extract_parameters(method_entry_addr, len(func_name) + 1, settings)
             if not params:
                 del vmt_mdt_top_info.entries[vmt]
                 break
@@ -764,14 +764,14 @@ def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) 
         return None
 
     rtti_object_name_field = addr.add(1)
-    rtti_object_name, str_len = read_pascal_str(rtti_object_name_field)
+    rtti_object_name = read_pascal_str(rtti_object_name_field)
 
     # not of type RTTI_Class
     if magic_byte != 0x07:
         return rtti_object_name
 
-    rtti_namespace_field = rtti_object_name_field.add(str_len + 2 * settings.ptr_size + 2)
-    rtti_namespace, _ = read_pascal_str(rtti_namespace_field)
+    rtti_namespace_field = rtti_object_name_field.add(len(rtti_object_name) + 1 + 2 * settings.ptr_size + 2)
+    rtti_namespace = read_pascal_str(rtti_namespace_field)
 
     namespace = rtti_namespace + "." + rtti_object_name
 
