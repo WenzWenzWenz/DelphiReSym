@@ -183,7 +183,7 @@ def read_pascal_str(addr: Address) -> str:
         str: The decoded string.
     """
     pascal_str = ""
-    
+
     memory_interface = currentProgram.getMemory()
     pascal_str_len = memory_interface.getByte(addr) & 0xFF
 
@@ -285,7 +285,7 @@ def check_vmt_candidate(
         bool: Result of candidate VMT sanity checks.
     """
     ptr_size = settings.ptr_size
-    
+
     addresses = []
     addresses.append(next_struct)
 
@@ -333,10 +333,10 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
     current_address = settings.text_block_start_addr
     while current_address < settings.text_block_end_addr.subtract(settings.ptr_size - 1):
         check_cancel()
-        
+
         current_val = read_ptr(current_address, settings.ptr_size)
         distance = current_val.subtract(current_address)
-        
+
         if distance == settings.jump_dist:
             if not check_vmt_candidate(current_address, current_val, settings):
                 debug(f"REJECTED VMT candidate @ {current_address}. Didn't pass sanity checks.")
@@ -399,19 +399,19 @@ def get_vmt_field_addresses(
 #    DATA CLASSES for VirtualMethodTables, MethodDefinitionTables, MethodEntries and Parameters   #
 ###################################################################################################
 @dataclass
-class ParamInfo:
+class ParameterInfo:
     rtti_addr: Address
-    param_name: str
+    parameter_name: str
     rtti_namespace: str
 
 
 @dataclass
 class MeInfo:
-    func_entry_point: Optional[Address] = 0
-    func_name: Optional[str] = ""
-    ret_type_at: Optional[Address | str] = "n.a."
-    ret_type_str: Optional[str] = "void"
-    param_entries: dict[Address, ParamInfo] = field(default_factory=dict)
+    function_entry_point: Optional[Address] = 0
+    function_name: Optional[str] = ""
+    return_type_at: Optional[Address | str] = "n.a."
+    return_type_str: Optional[str] = "void"
+    parameter_entries: dict[Address, ParameterInfo] = field(default_factory=dict)
 
 
 @dataclass
@@ -487,7 +487,7 @@ def traverse_mdt_top_level(
     mapping = VmtMdtMapping()
 
     memory_interface = currentProgram.getMemory()
-    
+
     for vmt_addr, mdt_addr in vmt_mdt_relations.items():
         check_cancel()
 
@@ -510,11 +510,11 @@ def traverse_mdt_top_level(
     return mapping
 
 
-def traverse_param_entries(
-    first_param_entry_addr: Address,
-    num_of_param_entries: int,
+def traverse_parameter_entries(
+    first_parameter_entry_addr: Address,
+    num_of_parameter_entries: int,
     settings: ArchitectureSpecificSettings,
-) -> dict[Address, ParamInfo]:
+) -> dict[Address, ParameterInfo]:
     """
     Traverse a sequence of ParamEntries and extract relevant RTTI and naming information.
 
@@ -523,45 +523,45 @@ def traverse_param_entries(
     the information in a structured dictionary.
 
     Parameters:
-        first_param_entry_addr (ghidra.program.model.address.Address): Starting address of the first
+        first_parameter_entry_addr (ghidra.program.model.address.Address): Starting address of the first
             ParamEntry.
-        num_of_param_entries (int): Number of ParamEntries to process.
+        num_of_parameter_entries (int): Number of ParamEntries to process.
         settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
         dict[ghidra.program.model.address.Address,ParamInfo]: Mapping from each ParamEntry's address
             to a dictionary containing the parameter's RTTI address, name, and namespace.
     """
-    param_entries_info = {}
+    parameter_entries_info = {}
 
-    current_addr = first_param_entry_addr
+    current_addr = first_parameter_entry_addr
 
-    for _ in range(num_of_param_entries):
+    for _ in range(num_of_parameter_entries):
         check_cancel()
 
         # grab information
-        param_entry_addr = current_addr
+        parameter_entry_addr = current_addr
         try:
             rtti = read_ptr(read_ptr(current_addr, settings.ptr_size), settings.ptr_size)
             rtti_namespace = traverse_rtti_object(rtti, settings)
         except Exception:
             rtti = None
             rtti_namespace = None
-        param_name_addr = current_addr.add(settings.ptr_size + 2)
-        param_name = read_pascal_str(param_name_addr)
+        parameter_name_addr = current_addr.add(settings.ptr_size + 2)
+        parameter_name = read_pascal_str(parameter_name_addr)
 
         # store information
-        param_entries_info[param_entry_addr] = ParamInfo(
-            rtti_addr=rtti, param_name=param_name, rtti_namespace=rtti_namespace
+        parameter_entries_info[parameter_entry_addr] = ParameterInfo(
+            rtti_addr=rtti, parameter_name=parameter_name, rtti_namespace=rtti_namespace
         )
 
         # next ParamEntry
-        current_addr = param_name_addr.add(len(param_name) + 1 + 3)
+        current_addr = parameter_name_addr.add(len(parameter_name) + 1 + 3)
 
-    return param_entries_info
+    return parameter_entries_info
 
 
-def extract_func_entry_point(
+def extract_function_entry_point(
     method_entry_addr: Address, settings: ArchitectureSpecificSettings
 ) -> Address:
     """
@@ -578,7 +578,7 @@ def extract_func_entry_point(
     return read_ptr(function_def_addr_field, settings.ptr_size)
 
 
-def extract_func_name(
+def extract_function_name(
     method_entry_addr: Address, settings: ArchitectureSpecificSettings
 ) -> str | None:
     """
@@ -593,22 +593,23 @@ def extract_func_name(
     """
     name_of_function_addr = method_entry_addr.add(settings.ptr_size + 2)
     try:
-        func_name = read_pascal_str(name_of_function_addr)
-        return func_name
+        function_name = read_pascal_str(name_of_function_addr)
+        return function_name
     except MemoryAccessException:
         warning(f"Grab of nameOfFunctionAddr failed. Skipping ME: {method_entry_addr}.")
         return None
 
 
-def extract_ret_type(
-    method_entry_addr: Address, func_name_len: int, settings: ArchitectureSpecificSettings
+def extract_return_type(
+    method_entry_addr: Address, function_name_len: int, settings: ArchitectureSpecificSettings
 ) -> tuple[Address, str] | tuple[None, None]:
     """
     Extract the return type of a function given a specific MethodEntry address.
 
     Parameters:
         method_entry_addr (ghidra.program.model.address.Address): Starting address of MethodEntry.
-        func_name_len (int): The length of the function name preceeding the return type information.
+        function_name_len (int): The length of the function name preceeding the return type
+            information.
         settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
@@ -617,32 +618,35 @@ def extract_ret_type(
     """
     all_zero_addr = convert_to_addr("0x0")
 
-    ret_type_addr_field = method_entry_addr.add(func_name_len + settings.ptr_size + 4)
+    return_type_addr_field = method_entry_addr.add(function_name_len + settings.ptr_size + 4)
     try:
-        dereferenced_ret_type_addr = read_ptr(ret_type_addr_field, settings.ptr_size)
-        ret_type_at = dereferenced_ret_type_addr
-        
-        if dereferenced_ret_type_addr == all_zero_addr:
-            return ret_type_at, "void"
+        dereferenced_return_type_addr = read_ptr(return_type_addr_field, settings.ptr_size)
+        return_type_at = dereferenced_return_type_addr
 
-        doubly_dereferenced_ret_type_addr = read_ptr(dereferenced_ret_type_addr, settings.ptr_size)
-        ret_type_str = traverse_rtti_object(doubly_dereferenced_ret_type_addr, settings)
+        if dereferenced_return_type_addr == all_zero_addr:
+            return return_type_at, "void"
+
+        doubly_dereferenced_return_type_addr = read_ptr(
+            dereferenced_return_type_addr, settings.ptr_size
+        )
+        return_type_str = traverse_rtti_object(doubly_dereferenced_return_type_addr, settings)
     except MemoryAccessException:
         warning(warning(f"Read of return type failed. Skipping ME: {method_entry_addr}."))
         return None, None
 
-    return ret_type_at, ret_type_str
+    return return_type_at, return_type_str
 
 
 def extract_parameters(
-    method_entry_addr: Address, func_name_len: int, settings: ArchitectureSpecificSettings
-) -> dict[Address, ParamInfo] | None:
+    method_entry_addr: Address, function_name_len: int, settings: ArchitectureSpecificSettings
+) -> dict[Address, ParameterInfo] | None:
     """
     Extract the parameter information of a function given a specific MethodEntry address.
 
     Parameters:
         method_entry_addr (ghidra.program.model.address.Address): Starting address of MethodEntry.
-        func_name_len (int): The length of the function name preceeding the return type information.
+        function_name_len (int): The length of the function name preceeding the return type
+            information.
         settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
 
     Returns:
@@ -651,17 +655,19 @@ def extract_parameters(
     """
     memory_interface = currentProgram.getMemory()
 
-    num_of_param_entries_field = method_entry_addr.add(func_name_len + 2 * settings.ptr_size + 6)
-    num_of_param_entries = memory_interface.getByte(num_of_param_entries_field) & 0xFF
+    num_of_parameter_entries_field = method_entry_addr.add(
+        function_name_len + 2 * settings.ptr_size + 6
+    )
+    num_of_parameter_entries = memory_interface.getByte(num_of_parameter_entries_field) & 0xFF
 
-    first_param_entry_field = num_of_param_entries_field.add(2)
+    first_parameter_entry_field = num_of_parameter_entries_field.add(2)
     # address outside the .text section => false positive
     if not (
-        settings.text_block_start_addr <= first_param_entry_field <= settings.text_block_end_addr
+        settings.text_block_start_addr <= first_parameter_entry_field <= settings.text_block_end_addr
     ):
         return None
 
-    return traverse_param_entries(first_param_entry_field, num_of_param_entries, settings)
+    return traverse_parameter_entries(first_parameter_entry_field, num_of_parameter_entries, settings)
 
 
 def traverse_method_entries(
@@ -693,7 +699,7 @@ def traverse_method_entries(
             check_cancel()
 
             try:
-                func_entry_point = extract_func_entry_point(method_entry_addr, settings)
+                function_entry_point = extract_function_entry_point(method_entry_addr, settings)
             except MemoryAccessException:
                 warning(f"Read of func entry point failed. Skipping ME: {method_entry_addr}.")
                 continue
@@ -702,28 +708,28 @@ def traverse_method_entries(
             except AddressOutOfBoundsException:
                 break
 
-            func_name = extract_func_name(method_entry_addr, settings)
-            if not func_name:
+            function_name = extract_function_name(method_entry_addr, settings)
+            if not function_name:
                 continue
 
-            ret_type_addr, ret_type_str = extract_ret_type(
-                method_entry_addr, len(func_name) + 1, settings
+            return_type_addr, return_type_str = extract_return_type(
+                method_entry_addr, len(function_name) + 1, settings
             )
-            if not (ret_type_addr or ret_type_str):
+            if not (return_type_addr or return_type_str):
                 continue
 
-            params = extract_parameters(method_entry_addr, len(func_name) + 1, settings)
+            params = extract_parameters(method_entry_addr, len(function_name) + 1, settings)
             if not params:
                 del vmt_mdt_top_info.entries[vmt]
                 break
 
             # store gathered information
             method_entry_info = MeInfo(
-                func_entry_point=func_entry_point,
-                func_name=func_name,
-                ret_type_at=ret_type_addr,
-                ret_type_str=ret_type_str,
-                param_entries=params,
+                function_entry_point=function_entry_point,
+                function_name=function_name,
+                return_type_at=return_type_addr,
+                return_type_str=return_type_str,
+                parameter_entries=params,
             )
             method_entries_info.method_entries[method_entry_addr] = method_entry_info
 
@@ -770,7 +776,9 @@ def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) 
     if magic_byte != 0x07:
         return rtti_object_name
 
-    rtti_namespace_field = rtti_object_name_field.add(len(rtti_object_name) + 1 + 2 * settings.ptr_size + 2)
+    rtti_namespace_field = rtti_object_name_field.add(
+        len(rtti_object_name) + 1 + 2 * settings.ptr_size + 2
+    )
     rtti_namespace = read_pascal_str(rtti_namespace_field)
 
     namespace = rtti_namespace + "." + rtti_object_name
@@ -796,7 +804,7 @@ def add_namespace_information(
     """
     for vmt, rtti in vmt_rtti_relations.items():
         check_cancel()
-        
+
         # can happen if a VMT was removed during traverseMethodEntries()
         if vmt not in symbol_info.entries:
             continue
@@ -818,7 +826,7 @@ def parse_namespace(namespace_str: str):
             bracket_counter += 1
             continue
         if token == ">":
-            if bracket_counter <=0:
+            if bracket_counter <= 0:
                 raise RuntimeError(f"Invalid namespace: {namespace_str}")
             bracket_counter -= 1
         if token == ".":
@@ -884,63 +892,65 @@ def prepare_data_type(type_string: str) -> DataType:
         final_data_type = data_type_mapping[type_string]()
     else:
         # create datatype
-        param_namespace = prepare_namespace(type_string)
-        param_class_name = type_string.split(".")[-1].rstrip(">")  # TODO fix this problem
+        parameter_namespace = prepare_namespace(type_string)
+        parameter_class_name = type_string.split(".")[-1].rstrip(">")  # TODO fix this problem
 
         try:
-            createClass(param_namespace, param_class_name)
+            createClass(parameter_namespace, parameter_class_name)
+            if parameter_class_name == "WideString":
+                print(f"parameter_namespace: {parameter_namespace}, type_string: {type_string}")
         except DuplicateNameException:
             pass
 
         category_path = CategoryPath(
-            "/" + param_namespace.getParentNamespace().getName(True).replace("::", "/")
+            "/" + parameter_namespace.getParentNamespace().getName(True).replace("::", "/")
         )
-        data_type = StructureDataType(category_path, param_class_name, 0)
+        data_type = StructureDataType(category_path, parameter_class_name, 0)
         registered_data_type = data_types.addDataType(data_type, None)
         final_data_type = PointerDataType(registered_data_type)
 
     return final_data_type
 
 
-def apply_func_names(func_entry_point: Address, func_name: str) -> int:
+def apply_function_names(function_entry_point: Address, function_name: str) -> int:
     """
     Applies function name information for a specific function.
 
     Parameters:
-        func_entry_point (ghidra.program.model.address.Address): ...
-        func_name (str): ...
+        function_entry_point (ghidra.program.model.address.Address): ...
+        function_name (str): ...
     Returns:
         int: An error code. A zero means that no return type was applied.
     """
     function_manager = currentProgram.getFunctionManager()
-    function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
+    function = function_manager.getFunctionAt(convert_to_addr(function_entry_point))
 
     # if ghidra doesn't recognize this address already as a function
     if not function:
         # creating via the light-weight FlatProgramAPI function sets a name automatically
-        function = createFunction(convert_to_addr(func_entry_point), func_name)
+        function = createFunction(convert_to_addr(function_entry_point), function_name)
         # function could not be created for some reason, hence skip its symbol recovery
         if function is None:
             return 0
     else:
         # if function is already been known to ghidra, replace its name
-        function.setName(func_name, SourceType.USER_DEFINED)
+        function.setName(function_name, SourceType.USER_DEFINED)
 
     return 1
 
 
-def apply_namespaces(func_entry_point: Address, namespace: str) -> int:
+def apply_namespaces(function_entry_point: Address, namespace: str) -> int:
     """
     Applies namespace information for a specific function.
 
     Parameters:
-        func_entry_point (ghidra.program.model.address.Address): ...
+        function_entry_point (ghidra.program.model.address.Address): ...
         namespace (str): ...
     Returns:
         int: An error code. A zero means that no return type was applied.
     """
     function_manager = currentProgram.getFunctionManager()
-    function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
+    function = function_manager.getFunctionAt(convert_to_addr(function_entry_point))
 
     if namespace is not None:
         try:
@@ -951,52 +961,54 @@ def apply_namespaces(func_entry_point: Address, namespace: str) -> int:
             return 0
 
 
-def apply_return_types(func_entry_point: Address, ret_type_str: str) -> int:
+def apply_return_types(function_entry_point: Address, return_type_str: str) -> int:
     """
     Applies return type information for a specific function.
 
     Parameters:
-        func_entry_point (ghidra.program.model.address.Address): ...
-        ret_type_str (str): ...
+        function_entry_point (ghidra.program.model.address.Address): ...
+        return_type_str (str): ...
     Returns:
         int: An error code. A zero means that no return type was applied.
     """
-    if ret_type_str is None:
+    if return_type_str is None:
         return 0
 
     function_manager = currentProgram.getFunctionManager()
-    function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
+    function = function_manager.getFunctionAt(convert_to_addr(function_entry_point))
 
-    return_data_type_object = prepare_data_type(ret_type_str)
+    return_data_type_object = prepare_data_type(return_type_str)
     function.setReturnType(return_data_type_object, SourceType.USER_DEFINED)
     return 1
 
 
-def apply_param_tuples(
-    func_entry_point: Address, param_entries: dict[Address, ParamInfo], namespace: str
+def apply_parameter_tuples(
+    function_entry_point: Address, parameter_entries: dict[Address, ParameterInfo], namespace: str
 ) -> int:
     """
     Applies parameter tuple (parameter type, parameter data type) information for a specific
     function given ParamInfo data.
 
     Parameters:
-        func_entry_point (ghidra.program.model.address.Address): ...
+        function_entry_point (ghidra.program.model.address.Address): ...
     Returns:
         int: An error code. A zero means failed application of a set of parameter tuples.
     """
     # prepare parameters
     params = []
-    for _, param_info in param_entries.items():
-        rtti_name = namespace if param_info.rtti_namespace is None or param_info.param_name == "Self" else param_info.rtti_namespace
-
+    for _, parameter_info in parameter_entries.items():
+        rtti_name = (
+            namespace
+            if parameter_info.rtti_namespace is None or parameter_info.parameter_name == "Self"
+            else parameter_info.rtti_namespace
+        )
         final_data_type = prepare_data_type(rtti_name)
-
-        param = ParameterImpl(param_info.param_name, final_data_type, currentProgram)
+        param = ParameterImpl(parameter_info.parameter_name, final_data_type, currentProgram)
         params.append(param)
 
     # replace parameters
     function_manager = currentProgram.getFunctionManager()
-    function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
+    function = function_manager.getFunctionAt(convert_to_addr(function_entry_point))
     try:
         function.replaceParameters(
             Function.FunctionUpdateType.DYNAMIC_STORAGE_ALL_PARAMS,
@@ -1037,18 +1049,18 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
         for _, me_info in mdt_me_info.method_entries.items():
             check_cancel()
 
-            if not apply_func_names(me_info.func_entry_point, me_info.func_name):
+            if not apply_function_names(me_info.function_entry_point, me_info.function_name):
                 continue
             apply_count["function"] += 1
 
-            if apply_namespaces(me_info.func_entry_point, namespace):
+            if apply_namespaces(me_info.function_entry_point, namespace):
                 apply_count["fqn"] += 1
 
-            if apply_return_types(me_info.func_entry_point, me_info.ret_type_str):
+            if apply_return_types(me_info.function_entry_point, me_info.return_type_str):
                 apply_count["return"] += 1
 
-            if apply_param_tuples(
-                me_info.func_entry_point, me_info.param_entries, mdt_me_info.namespace
+            if apply_parameter_tuples(
+                me_info.function_entry_point, me_info.parameter_entries, mdt_me_info.namespace
             ):
                 apply_count["paramSet"] += 1
 
@@ -1107,7 +1119,7 @@ def print_final_stats(
         f"or {recovery_counts['paramSet']/original_function_count*100:.2f}% when using "
         "pre-execution function count."
     )
-    
+
     return
 
 
