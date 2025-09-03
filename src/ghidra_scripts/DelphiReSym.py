@@ -28,6 +28,7 @@ from ghidra.program.model.data import (                                         
     IntegerDataType,
     CharDataType,
     StructureDataType,
+    PascalUnicodeDataType,
 )
 from ghidra.program.model.data import (                                         # type: ignore
     DataType,
@@ -96,10 +97,10 @@ data_type_mapping = {
     "Char": CharDataType,
     "UInt64": UnsignedIntegerDataType,
     "Byte": ByteDataType,
-    "string": lambda: PointerDataType(
-        CharDataType()
-    ),  # not StringDataType since it is a factory datatype
-    # "WideString",
+    # not StringDataType since it is a factory datatype
+    "string": lambda: PointerDataType(CharDataType()),
+    # for reference: https://docwiki.embarcadero.com/RADStudio/Sydney/en/String_Types_(Delphi)
+    "WideString": lambda: PointerDataType(PascalUnicodeDataType()),
     # 'Extended',
     # 'AnsiString',
     # 'Int64',
@@ -457,7 +458,7 @@ def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) 
     rtti_object_name_field = addr.add(1)
     rtti_object_name = read_pascal_str(rtti_object_name_field)
 
-    # not of type RTTI_Class
+    # not of type RTTI_Class  # TODO: Think about mapping WideStr etc. to `System.` instead of PaUni 
     if magic_byte != 0x07:
         return rtti_object_name
 
