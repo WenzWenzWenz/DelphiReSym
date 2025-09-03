@@ -892,18 +892,17 @@ def prepare_data_type(type_string: str) -> DataType:
         final_data_type = data_type_mapping[type_string]()
     else:
         # create datatype
-        parameter_namespace = prepare_namespace(type_string)
-        parameter_class_name = type_string.split(".")[-1].rstrip(">")  # TODO fix this problem
-
+        namespace = prepare_namespace(type_string)
+        class_name = list(parse_namespace(type_string))[-1]
         try:
-            createClass(parameter_namespace, parameter_class_name)
+            createClass(namespace, class_name)
         except DuplicateNameException:
             pass
 
         category_path = CategoryPath(
-            "/" + parameter_namespace.getParentNamespace().getName(True).replace("::", "/")
+            "/" + namespace.getParentNamespace().getName(True).replace("::", "/")
         )
-        data_type = StructureDataType(category_path, parameter_class_name, 0)
+        data_type = StructureDataType(category_path, class_name, 0)
         registered_data_type = data_types.addDataType(data_type, None)
         final_data_type = PointerDataType(registered_data_type)
 
