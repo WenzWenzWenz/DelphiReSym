@@ -427,6 +427,80 @@ class VmtMdtMapping:
 
 
 ###################################################################################################
+#    MAIN LOGIC - RTTI_CLASS RELATED                                                              #
+###################################################################################################
+def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) -> str | None:
+    """
+    Traverse a Delphi RTTI object and extract string information based on its magic byte.
+
+    If the RTTI object is an RTTI_Class (0x07), its object name and namespace get returned, i.e.
+    `Namespace.ClassName`.
+    If the RTTI object is of any other RTTI object type, only the object's name gets returned, as
+    the structure of the different RTTI object types have not yet been fully understood.
+
+    Parameters:
+        addr (ghidra.program.model.address.Address): The address pointing to the beginning of a
+            potential RTTI object.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
+
+    Returns:
+        str|None: Namespace of the RTTI_Class's VMT as a string, or the the RTTI object's name
+            (if it's not an RTTI_Class), or None if the structure is invalid.
+    """
+    memory_interface = currentProgram.getMemory()
+    magic_byte = memory_interface.getByte(addr) & 0xFF
+
+    if magic_byte > 0x15:
+        warning(f"Tried to traverse data @{addr}, but it's not an RTTI object! Skipping.")
+        return None
+
+    rtti_object_name_field = addr.add(1)
+    rtti_object_name = read_pascal_str(rtti_object_name_field)
+
+    # not of type RTTI_Class
+    if magic_byte != 0x07:
+        return rtti_object_name
+
+    rtti_namespace_field = rtti_object_name_field.add(
+        len(rtti_object_name) + 1 + 2 * settings.ptr_size + 2
+    )
+    rtti_namespace = read_pascal_str(rtti_namespace_field)
+
+    namespace = rtti_namespace + "." + rtti_object_name
+
+    return namespace
+
+
+def add_namespace_information(
+    vmt_rtti_relations: dict, symbol_info: VmtMdtMapping, settings: dict
+) -> VmtMdtMapping:
+    """
+    Augment symbol information with the namespace string derived via RTTI traversal. The function
+    ensures consistency with any VMTs previously filtered out.
+
+    Parameters:
+        vmtRttiRelations (dict): Mapping of VMT addresses to RTTI addresses.
+        symbolInfo (VmtMdtMapping): Dataclass instance holding all previously gathered metadata.
+        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
+
+    Returns:
+        VmtMdtMapping: Dataclass instance holding previously gathered metadata, including freshly
+            added RTTI namespace information.
+    """
+    for vmt, rtti in vmt_rtti_relations.items():
+        check_cancel()
+
+        # can happen if a VMT was removed during traverseMethodEntries()
+        if vmt not in symbol_info.entries:
+            continue
+
+        symbol_info.entries[vmt].namespace = traverse_rtti_object(rtti, settings)
+
+    debug(f"Final dictionary information after add_namespace_information(): {symbol_info}")
+    return symbol_info
+
+
+###################################################################################################
 #    MAIN LOGIC - MDT RELATED                                                                     #
 ###################################################################################################
 def get_method_entries(
@@ -739,80 +813,6 @@ def traverse_method_entries(
 
     debug(f"Symbolic information after traverse_method_entries(): {vmt_mdt_top_info}")
     return vmt_mdt_top_info
-
-
-###################################################################################################
-#    MAIN LOGIC - RTTI_CLASS RELATED                                                              #
-###################################################################################################
-def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) -> str | None:
-    """
-    Traverse a Delphi RTTI object and extract string information based on its magic byte.
-
-    If the RTTI object is an RTTI_Class (0x07), its object name and namespace get returned, i.e.
-    `Namespace.ClassName`.
-    If the RTTI object is of any other RTTI object type, only the object's name gets returned, as
-    the structure of the different RTTI object types have not yet been fully understood.
-
-    Parameters:
-        addr (ghidra.program.model.address.Address): The address pointing to the beginning of a
-            potential RTTI object.
-        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
-
-    Returns:
-        str|None: Namespace of the RTTI_Class's VMT as a string, or the the RTTI object's name
-            (if it's not an RTTI_Class), or None if the structure is invalid.
-    """
-    memory_interface = currentProgram.getMemory()
-    magic_byte = memory_interface.getByte(addr) & 0xFF
-
-    if magic_byte > 0x15:
-        warning(f"Tried to traverse data @{addr}, but it's not an RTTI object! Skipping.")
-        return None
-
-    rtti_object_name_field = addr.add(1)
-    rtti_object_name = read_pascal_str(rtti_object_name_field)
-
-    # not of type RTTI_Class
-    if magic_byte != 0x07:
-        return rtti_object_name
-
-    rtti_namespace_field = rtti_object_name_field.add(
-        len(rtti_object_name) + 1 + 2 * settings.ptr_size + 2
-    )
-    rtti_namespace = read_pascal_str(rtti_namespace_field)
-
-    namespace = rtti_namespace + "." + rtti_object_name
-
-    return namespace
-
-
-def add_namespace_information(
-    vmt_rtti_relations: dict, symbol_info: VmtMdtMapping, settings: dict
-) -> VmtMdtMapping:
-    """
-    Augment symbol information with the namespace string derived via RTTI traversal. The function
-    ensures consistency with any VMTs previously filtered out.
-
-    Parameters:
-        vmtRttiRelations (dict): Mapping of VMT addresses to RTTI addresses.
-        symbolInfo (VmtMdtMapping): Dataclass instance holding all previously gathered metadata.
-        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
-
-    Returns:
-        VmtMdtMapping: Dataclass instance holding previously gathered metadata, including freshly
-            added RTTI namespace information.
-    """
-    for vmt, rtti in vmt_rtti_relations.items():
-        check_cancel()
-
-        # can happen if a VMT was removed during traverseMethodEntries()
-        if vmt not in symbol_info.entries:
-            continue
-
-        symbol_info.entries[vmt].namespace = traverse_rtti_object(rtti, settings)
-
-    debug(f"Final dictionary information after add_namespace_information(): {symbol_info}")
-    return symbol_info
 
 
 ###################################################################################################
