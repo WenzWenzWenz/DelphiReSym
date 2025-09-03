@@ -902,12 +902,121 @@ def prepare_data_type(type_string: str) -> DataType:
     return final_data_type
 
 
+def apply_func_names(func_entry_point: Address, func_name: str) -> int:
+    """
+    Applies function name information for a specific function.
+
+    Parameters:
+        func_entry_point (ghidra.program.model.address.Address): ...
+        func_name (str): ...
+    Returns:
+        int: An error code. A zero means that no return type was applied.
+    """
+    function_manager = currentProgram.getFunctionManager()
+    function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
+
+    # if ghidra doesn't recognize this address already as a function
+    if not function:
+        # creating via the light-weight FlatProgramAPI function sets a name automatically
+        function = createFunction(convert_to_addr(func_entry_point), func_name)
+        # function could not be created for some reason, hence skip its symbol recovery
+        if function is None:
+            return 0
+    else:
+        # if function is already been known to ghidra, replace its name
+        function.setName(func_name, SourceType.USER_DEFINED)
+
+    return 1
+
+
+def apply_namespaces(func_entry_point: Address, namespace: str) -> int:
+    """
+    Applies namespace information for a specific function.
+
+    Parameters:
+        func_entry_point (ghidra.program.model.address.Address): ...
+        namespace (str): ...
+    Returns:
+        int: An error code. A zero means that no return type was applied.
+    """
+    function_manager = currentProgram.getFunctionManager()
+    function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
+
+    if namespace is not None:
+        try:
+            function.setParentNamespace(namespace)
+            return 1
+        except Exception as e:
+            warning(f"Caught exception: {e}\n...for {namespace}. Please notify the author.")
+            return 0
+
+
+def apply_return_types(func_entry_point: Address, ret_type_str: str) -> int:
+    """
+    Applies return type information for a specific function.
+
+    Parameters:
+        func_entry_point (ghidra.program.model.address.Address): ...
+        ret_type_str (str): ...
+    Returns:
+        int: An error code. A zero means that no return type was applied.
+    """
+    if ret_type_str is None:
+        return 0
+
+    function_manager = currentProgram.getFunctionManager()
+    function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
+
+    return_data_type_object = prepare_data_type(ret_type_str)
+    function.setReturnType(return_data_type_object, SourceType.USER_DEFINED)
+    return 1
+
+
+def apply_param_tuples(
+    func_entry_point: Address, param_entries: dict[Address, ParamInfo], namespace: str
+) -> int:
+    """
+    Applies parameter tuple (parameter type, parameter data type) information for a specific
+    function given ParamInfo data.
+
+    Parameters:
+        func_entry_point (ghidra.program.model.address.Address): ...
+    Returns:
+        int: An error code. A zero means failed application of a set of parameter tuples.
+    """
+    # prepare parameters
+    params = []
+    for _, param_info in param_entries.items():
+        rtti_name = namespace if param_info.rtti_namespace is None or param_info.param_name == "Self" else param_info.rtti_namespace
+
+        final_data_type = prepare_data_type(rtti_name)
+
+        param = ParameterImpl(param_info.param_name, final_data_type, currentProgram)
+        params.append(param)
+
+    # replace parameters
+    function_manager = currentProgram.getFunctionManager()
+    function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
+    try:
+        function.replaceParameters(
+            Function.FunctionUpdateType.DYNAMIC_STORAGE_ALL_PARAMS,
+            True,
+            SourceType.USER_DEFINED,
+            params,
+        )
+    # skip in case of invalid symbol names
+    except InvalidInputException:
+        return 0
+
+    return 1
+
+
 def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
     """
     Handles the actual symbol name recovering, given all previously gathered information.
 
-    For every found VMT, the function iterates over the MethodEntry data and attempts to apply data
-    like its name, parameter and return types and parameter names.
+    For every found VMT, the function iterates over every MethodEntry information and attempts to
+    apply data like its name, parameter and return types and parameter names in Ghidra.
 
     Parameters:
         allSymbolInfo (VmtMdtMapping): Dataclass instance holding all previously gathered metadata.
@@ -915,112 +1024,33 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
     Returns:
         dict: Counts the numbers of VMTs, function names, and FQNs which have been fully recovered.
     """
-    # grab necessary interfaces
-    function_manager = currentProgram.getFunctionManager()
-
-    # count how many VMT/functions have been fully recovered (evaluation information only)
     apply_count = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "paramSet": 0}
 
     for vmt, mdt_me_info in all_symbol_info.entries.items():
         debug(f"[7/8] Currently proceessing symbol information for VMT @ {vmt} ...")
         apply_count["vmt"] += 1
 
-        # get namespace information from ghidra's symbol table or create it if required
-        namespace_str = mdt_me_info.namespace
-        if namespace_str is None or not namespace_str:
+        if mdt_me_info.namespace is None or not mdt_me_info.namespace:
             continue
-        namespace = prepare_namespace(namespace_str)
+        namespace = prepare_namespace(mdt_me_info.namespace)
 
         for _, me_info in mdt_me_info.method_entries.items():
             check_cancel()
-            # grab all pieces of information from all MDT levels and recover symbols accordingly
-            func_entry_point = me_info.func_entry_point
-            func_name = me_info.func_name
-            ret_type_str = me_info.ret_type_str
-            param_tuples = []
-            for _, param_info in me_info.param_entries.items():
-                # TODO: I think I can manage this now more easily with default value in dataclass
-                # and not overwriting checks
-                if param_info.rtti_namespace is None or param_info.param_name == "Self":
-                    param_tuples.append((param_info.param_name, namespace_str))
-                    continue
-                param_tuples.append((param_info.param_name, param_info.rtti_namespace))
 
-            # -------------------------- APPLY FUNCTION NAMES ----------------------------------- #
-            # start the actual symbol name recovery transformation with grabbing the function to
-            # edit
-            function = function_manager.getFunctionAt(convert_to_addr(func_entry_point))
-            # if ghidra doesn't recognize this address already as a function
-            if not function:
-                # creating via the light-weight FlatProgramAPI function sets a name automatically
-                function = createFunction(convert_to_addr(func_entry_point), func_name)
-                # function could not be created for some reason, hence skip its symbol recovery
-                if function is None:
-                    continue
-            else:
-                # if function is already been known to ghidra, replace its name
-                function.setName(func_name, SourceType.USER_DEFINED)
-
-            apply_count["function"] += 1
-            # ----------------------------------------------------------------------------------- #
-
-            # -------------------------- APPLY NAMESPACES --------------------------------------- #
-            if namespace is not None:
-                try:
-                    function.setParentNamespace(namespace)
-                    debug(
-                        f"Successfully applied FQN {namespace}::{func_name} function @ "
-                        f"{func_entry_point}."
-                    )
-                    apply_count["fqn"] += 1
-                except (
-                    Exception
-                ) as e:  # java.lang.IllegalArgumentException: namespace is from different program
-                    # instance: System::TMarshal
-                    warning(e)
-                    warning(namespace)
-                    pass
-            # ----------------------------------------------------------------------------------- #
-
-            # -------------------------- APPLY RETURN TYPES ------------------------------------- #
-            if ret_type_str is not None:
-                # retrieve DataType object for return type application
-                final_data_type = prepare_data_type(ret_type_str)
-
-                # replace return type
-                function.setReturnType(final_data_type, SourceType.USER_DEFINED)
-
-                debug(
-                    f"Successfully applied return type {ret_type_str} to function "
-                    f"@ {func_entry_point}."
-                )
-                apply_count["return"] += 1
-            # ----------------------------------------------------------------------------------- #
-
-            # -------------------------- APPLY PARAM TUPLES ------------------------------------- #
-            params = []
-            for param_name, rtti_name in param_tuples:
-                # retrieve DataType object for parameter application preparation
-                final_data_type = prepare_data_type(rtti_name)
-
-                # Create parameters using ParameterImpl(name, dataType, program) and add them to
-                param = ParameterImpl(param_name, final_data_type, currentProgram)
-                params.append(param)
-
-            # replace parameters
-            try:
-                function.replaceParameters(
-                    Function.FunctionUpdateType.DYNAMIC_STORAGE_ALL_PARAMS,
-                    True,
-                    SourceType.USER_DEFINED,
-                    params,
-                )
-            # skip in case of invalid symbol names
-            except InvalidInputException:
+            if not apply_func_names(me_info.func_entry_point, me_info.func_name):
                 continue
+            apply_count["function"] += 1
 
-            apply_count["paramSet"] += 1
-            # ----------------------------------------------------------------------------------- #
+            if apply_namespaces(me_info.func_entry_point, namespace):
+                apply_count["fqn"] += 1
+
+            if apply_return_types(me_info.func_entry_point, me_info.ret_type_str):
+                apply_count["return"] += 1
+
+            if apply_param_tuples(
+                me_info.func_entry_point, me_info.param_entries, mdt_me_info.namespace
+            ):
+                apply_count["paramSet"] += 1
 
     return apply_count
 
