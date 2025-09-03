@@ -897,8 +897,6 @@ def prepare_data_type(type_string: str) -> DataType:
 
         try:
             createClass(parameter_namespace, parameter_class_name)
-            if parameter_class_name == "WideString":
-                print(f"parameter_namespace: {parameter_namespace}, type_string: {type_string}")
         except DuplicateNameException:
             pass
 
