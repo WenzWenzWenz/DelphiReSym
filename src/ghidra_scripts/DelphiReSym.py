@@ -1036,7 +1036,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
     Returns:
         dict: Counts the numbers of VMTs, function names, and FQNs which have been fully recovered.
     """
-    apply_count = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "paramSet": 0}
+    apply_count = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "parameter_set": 0}
 
     for vmt, mdt_me_info in all_symbol_info.entries.items():
         debug(f"[7/8] Currently proceessing symbol information for VMT @ {vmt} ...")
@@ -1062,7 +1062,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
             if apply_parameter_tuples(
                 me_info.function_entry_point, me_info.parameter_entries, mdt_me_info.namespace
             ):
-                apply_count["paramSet"] += 1
+                apply_count["parameter_set"] += 1
 
     return apply_count
 
@@ -1114,9 +1114,9 @@ def print_final_stats(
         "function count."
     )
     info(
-        f"[8/8] Statistics: Number of applied parameter sets: {recovery_counts['paramSet']}, "
-        f"yielding {recovery_counts['paramSet']/total_function_count*100:.2f}% of all functions; "
-        f"or {recovery_counts['paramSet']/original_function_count*100:.2f}% when using "
+        f"[8/8] Statistics: Number of applied parameter sets: {recovery_counts['parameter_set']}, "
+        f"yielding {recovery_counts['parameter_set']/total_function_count*100:.2f}% of all functions; "
+        f"or {recovery_counts['parameter_set']/original_function_count*100:.2f}% when using "
         "pre-execution function count."
     )
 
