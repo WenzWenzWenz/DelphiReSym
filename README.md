@@ -7,7 +7,7 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 > ⚠️ **Limitations**:
 >
 > * The tool only works on **unpacked** Delphi binaries. Packed binaries will most likely not contain accessible metadata. Use a service like [UnpacMe by OALabs](https://www.unpac.me/) if needed.
-> * Internal Delphi types are currently mapped to generic pointers for readability only (see [TODOs](https://github.com/WenzWenzWenz/DelphiReSym/tree/main?tab=readme-ov-file#-todo)).
+> * Internal Delphi types are currently mapped to generic pointers for readability only (see [TODOs](https://github.com/WenzWenzWenz/DelphiReSym/tree/main?tab=readme-ov-file#-roadmap)).
 
 
 
