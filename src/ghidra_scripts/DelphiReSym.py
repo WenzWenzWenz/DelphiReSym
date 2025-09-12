@@ -14,7 +14,7 @@ function signatures.
 from __future__ import annotations
 
 import pyghidra
-from typing import TYPE_CHECKING, cast, Optional, Any
+from typing import TYPE_CHECKING, cast, Optional, Any, NamedTuple
 from dataclasses import dataclass, field
 if TYPE_CHECKING:
     from ghidra.ghidra_builtins import *                                        # type: ignore
@@ -837,27 +837,26 @@ def parse_namespace(namespace_str: str):
     yield namespace_str[last_part_start:]
 
 
-def prepare_namespace(namespace_str: str) -> Namespace:
+class ParsedNamespace(NamedTuple):
+    namespace: Namespace
+    typename: str
+
+
+def prepare_namespace(namespace_str: str) -> ParsedNamespace:
     """
     Create or retrieve a nested namespace hierarchy in Ghidra's symbol table from a namespace
     string.
 
     Given a VMT address and a dot-separated namespace string, this function iteratively creates or
     retrieves each namespace component as a child of the previous one, starting from the global
-    namespace. The "youngest" namespace object is returned.
-
-    Parameters:
-        namespaceStr (str): Dot-separated namespace string (e.g.,
-            "MyNamespace.SubNamespace.ClassName").
-
-    Returns:
-        ghidra.program.model.symbol.Namespace: The final Namespace object corresponding to the
-            deepest namespace level.
+    namespace. Returns both the last created namespace and the name of the type.
     """
     symbol_table = currentProgram.getSymbolTable()
     parent_namespace = currentProgram.getGlobalNamespace()
 
-    for part in parse_namespace(namespace_str):
+    *parts, typename = parse_namespace(namespace_str)
+
+    for part in parts:
         check_cancel()
         try:
             parent_namespace = symbol_table.getOrCreateNameSpace(
@@ -866,7 +865,9 @@ def prepare_namespace(namespace_str: str) -> Namespace:
         except InvalidInputException:
             return None
 
-    return parent_namespace
+    print(f"{parent_namespace=}, {typename=}, {namespace_str=}")
+
+    return ParsedNamespace(parent_namespace, typename)
 
 
 def prepare_data_type(type_string: str) -> DataType:
@@ -893,15 +894,16 @@ def prepare_data_type(type_string: str) -> DataType:
         final_data_type = data_type_mapping[type_string]()
     else:
         # create datatype
-        namespace = prepare_namespace(type_string)
-        class_name = list(parse_namespace(type_string))[-1]
+        namespace, class_name = prepare_namespace(type_string)
         try:
             createClass(namespace, class_name)
         except DuplicateNameException:
             pass
 
+        print(f"namespace: {namespace}, class_name: {class_name}")
+
         category_path = CategoryPath(
-            "/" + namespace.getParentNamespace().getName(True).replace("::", "/")
+            "/" + namespace.getName(True).replace("::", "/")
         )
         data_type = StructureDataType(category_path, class_name, 0)
         registered_data_type = data_types.addDataType(data_type, None)
@@ -1042,7 +1044,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
 
         if mdt_me_info.namespace is None or not mdt_me_info.namespace:
             continue
-        namespace = prepare_namespace(mdt_me_info.namespace)
+        namespace, _ = prepare_namespace(mdt_me_info.namespace)
 
         for _, me_info in mdt_me_info.method_entries.items():
             check_cancel()
