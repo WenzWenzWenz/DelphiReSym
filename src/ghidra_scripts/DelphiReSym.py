@@ -865,8 +865,6 @@ def prepare_namespace(namespace_str: str) -> ParsedNamespace:
         except InvalidInputException:
             return None
 
-    print(f"{parent_namespace=}, {typename=}, {namespace_str=}")
-
     return ParsedNamespace(parent_namespace, typename)
 
 
@@ -899,8 +897,6 @@ def prepare_data_type(type_string: str) -> DataType:
             createClass(namespace, class_name)
         except DuplicateNameException:
             pass
-
-        print(f"namespace: {namespace}, class_name: {class_name}")
 
         category_path = CategoryPath(
             "/" + namespace.getName(True).replace("::", "/")
