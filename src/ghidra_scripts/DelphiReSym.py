@@ -11,10 +11,10 @@
 A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct symbols of
 function signatures.
 """
-from __future__ import annotations
 
 import pyghidra
-from typing import TYPE_CHECKING, cast, Optional, Any, NamedTuple
+from __future__ import annotations
+from typing import TYPE_CHECKING, cast, Optional, Any
 from dataclasses import dataclass, field
 if TYPE_CHECKING:
     from ghidra.ghidra_builtins import *                                        # type: ignore
@@ -153,13 +153,6 @@ def warning(msg: str) -> None:
 def read_ptr(addr: Address, ptr_size: int) -> Address:
     """
     Read a specified address of the given size from memory.
-
-    Parameters:
-        addr (ghidra.program.model.address.Address): The memory address to read from.
-        ptr_size (int): The size of the pointer (4 or 8 bytes).
-
-    Returns:
-        ghidra.program.model.address.Address: The resolved address the pointer refers to.
     """
     memory = currentProgram.getMemory()
     return (
@@ -175,13 +168,6 @@ def read_pascal_str(addr: Address) -> str:
 
     The string format expects the first byte to contain the length, followed by the corresponding
     characters whose number is equal to that length.
-
-    Parameters:
-        addr (ghidra.program.model.address.Address): The memory address where the Pascal-String
-            starts.
-
-    Returns:
-        str: The decoded string.
     """
     pascal_str = ""
 
@@ -215,18 +201,9 @@ def get_architecture_settings(text_section: MemoryBlock) -> ArchitectureSpecific
     """
     Return a dataclass instance holding information about architecture-specific settings, including
     pointer size and architecture specific jump distances to MDT and RTTI_Class.
-
-    The text block start and end addresses are just place holders at initialization time.
-
-    Parameters:
-        text_section (ghidra.program.model.mem.MemoryBlock): The .text section memory block to
-            look up its boarders for.
-
-    Returns:
-        ArchitectureSpecificSettings: A dataclass instance holding architecture settings.
     """
-    start = text_section.getStart()
-    end = text_section.getEnd()
+    start = text_section.getStart()  # place-holder at initialization time
+    end = text_section.getEnd()  # place-holder at initialization time
 
     ptr_size = currentProgram.getDefaultPointerSize()
     if ptr_size == 4:
@@ -243,15 +220,6 @@ def get_architecture_settings(text_section: MemoryBlock) -> ArchitectureSpecific
 def get_text_section(memory: Memory) -> MemoryBlock:
     """
     Retrieve the '.text' memory block from the given memory object.
-
-    Parameters:
-        memory (ghidra.program.model.mem.Memory): The memory interface to search.
-
-    Returns:
-        ghidra.program.model.mem.memoryblock: The '.text' memory block.
-
-    Raises:
-        Exception: If the '.text' segment is not found.
     """
     for section in memory.getBlocks():
         if section.getName() == ".text":
@@ -268,22 +236,7 @@ def check_vmt_candidate(
     settings: ArchitectureSpecificSettings,
 ) -> bool:
     """
-    Perform several sanity checks on the candidate VMT.
-
-    Five fields of the VMT have been chosen for the sanity checks; three of which must always be
-    filled with valid addresses in the range of the .text section. Same holds true for the other two
-    fields, which alternatively can be NULL too. As yet another sanity check, the address of the
-    MDT must be larger than the address of its VMT.
-
-    Parameters:
-        candidate_addr (ghidra.program.model.address.Address): The candidate VMT's address to be
-            sanity-checked.
-        next_struct (ghidra.program.model.address.Address): The value of the VMT's NextStruct field,
-            used for a sanity check.
-        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
-
-    Returns:
-        bool: Result of candidate VMT sanity checks.
+    Returns a boolean result of several sanity checks on the candidate VMT.
     """
     ptr_size = settings.ptr_size
 
@@ -298,14 +251,12 @@ def check_vmt_candidate(
         if mdt <= candidate_addr:
             return False
 
-    # sanity check for all 10 mandatory functions at the end of the VMT in a loop
     for current_field_number in range(11, 22):
         # exclude the SafeCallExceptionMethod field since it is the only optional one of the 10
         if current_field_number != 14:
             current_field = candidate_addr.add(ptr_size * current_field_number)
             addresses.append(read_ptr(current_field, ptr_size))
 
-    # returns True if all grabbed addresses are within range of the .text section
     return all(
         settings.text_block_start_addr
         <= addr
@@ -316,16 +267,9 @@ def check_vmt_candidate(
 
 def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
     """
-    Scan the .text section for potential VMT addresses.
-
-    Uses a sliding window approach to identify forward references of a specific size that may
-    indicate the presence of a VMT. Applies sanity checks before accepting each candidate.
-
-    Parameters:
-        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
-
-    Returns:
-        list[Address]: A list of addresses of VMTs.
+    Scan the .text section for potential VMT addresses, using a sliding window approach to identify
+    forward references of a specific size (candidate VMTs). Applies sanity checks before accepting
+    each candidate. Returns the sanity checked list of VMTs.
     """
     vmt_addresses = []
 
@@ -371,14 +315,6 @@ def get_vmt_field_addresses(
 
     For each VMT address, this function computes the address of the requested field (e.g., MDT or
     RTTI), dereferences it, and adds it to a returned dict.
-
-    Parameters:
-        vmt_addresses (list[Address]): List of candidate VMT addresses.
-        settings (dict): A dataclass instance holding architecture settings.
-        fieldname (str): Key indicating which field to extract (e.g., 'mdtOffset', 'rttiOffset').
-
-    Returns:
-        dict[Address, Address]: Mapping from VMT address to the resolved field address.
     """
     vmt_field_addresses = {}
 
@@ -434,19 +370,9 @@ def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) 
     """
     Traverse a Delphi RTTI object and extract string information based on its magic byte.
 
-    If the RTTI object is an RTTI_Class (0x07), its object name and namespace get returned, i.e.
-    `Namespace.ClassName`.
+    If the RTTI object is an RTTI_Class (magic byte 0x07), return its object name and namespace.
     If the RTTI object is of any other RTTI object type, only the object's name gets returned, as
     the structure of the different RTTI object types have not yet been fully understood.
-
-    Parameters:
-        addr (ghidra.program.model.address.Address): The address pointing to the beginning of a
-            potential RTTI object.
-        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
-
-    Returns:
-        str|None: Namespace of the RTTI_Class's VMT as a string, or the the RTTI object's name
-            (if it's not an RTTI_Class), or None if the structure is invalid.
     """
     memory_interface = currentProgram.getMemory()
     magic_byte = memory_interface.getByte(addr) & 0xFF
@@ -478,15 +404,6 @@ def add_namespace_information(
     """
     Augment symbol information with the namespace string derived via RTTI traversal. The function
     ensures consistency with any VMTs previously filtered out.
-
-    Parameters:
-        vmtRttiRelations (dict): Mapping of VMT addresses to RTTI addresses.
-        symbolInfo (VmtMdtMapping): Dataclass instance holding all previously gathered metadata.
-        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
-
-    Returns:
-        VmtMdtMapping: Dataclass instance holding previously gathered metadata, including freshly
-            added RTTI namespace information.
     """
     for vmt, rtti in vmt_rtti_relations.items():
         check_cancel()
@@ -505,7 +422,7 @@ def add_namespace_information(
 #    MAIN LOGIC - MDT RELATED                                                                     #
 ###################################################################################################
 def get_method_entries(
-    start_addr: Address,
+    first_me_addr: Address,
     num_of_method_entry_refs: int,
     settings: ArchitectureSpecificSettings,
     info: MdtMeInfo,
@@ -513,22 +430,11 @@ def get_method_entries(
     """
     Given an instance of an MdtMeInfo dataclass, grab each method entry address and prepare MeInfo
     dataclass instances for each of them.
-
-    Parameters:
-        start_addr (Address): Address of the first method entry in an MDT.
-        num_of_method_entry_ref_structs (dict): Number of method entries for an MDT.
-        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
-        current_info (MdtMeInfo): A dataclass instance which allows storage of method entry
-            information corresponding to MDTs.
-
-    Returns:
-        MdtMeInfo: The transformed dataclass instance, in which for each method entry an MeInfo
-            dataclass instance is prepared to be filled with information later.
     """
     for i in range(num_of_method_entry_refs):
         check_cancel()
 
-        current_method_entry_ref_field = start_addr.add(i * (settings.ptr_size + 4))
+        current_method_entry_ref_field = first_me_addr.add(i * (settings.ptr_size + 4))
         try:
             current_method_entry_addr = read_ptr(current_method_entry_ref_field, settings.ptr_size)
         except MemoryAccessException:
@@ -550,14 +456,6 @@ def traverse_mdt_top_level(
     Reads the number of method entry references from each MDT and resolves the addresses of the
     corresponding method entries. The result includes a mapping from VMTs to their MDT and a list of
     associated method entry addresses.
-
-    Parameters:
-        vmt_mdt_relations (dict): Mapping of VMT addresses to their MDT addresses.
-        settings (ArchitectureSpecificSettings): A dataclass instance holding architecture settings.
-
-    Returns:
-        VmtMdtMapping: A dataclass instance mapping each VMT address to its MDT address and a list
-        of resolved method entry addresses (yet without symbolic information).
     """
     mapping = VmtMdtMapping()
 
@@ -576,7 +474,7 @@ def traverse_mdt_top_level(
 
         method_entry_refs_start_addr = num_of_method_entry_refs_field.add(2)
 
-        # extend current_info with method entry address information
+        # extend with method entry address information
         current_info = get_method_entries(
             method_entry_refs_start_addr, num_of_method_entry_refs, settings, current_info
         )
@@ -820,6 +718,10 @@ def traverse_method_entries(
 #    MAIN LOGIC - TRANSFORMATION FUNCTIONS                                                        #
 ###################################################################################################
 def parse_namespace(namespace_str: str):
+    """
+    Given a dot separated namespace string, return a generator object yielding the parts of the
+    namespace string in hierarchically decending order. This parsing method is template-aware.
+    """
     bracket_counter = 0
     last_part_start = 0
     for k, token in enumerate(namespace_str):
@@ -839,8 +741,8 @@ def parse_namespace(namespace_str: str):
 
 def prepare_namespace(namespace_str: str) -> Namespace:
     """
-    Given a full namespace as a dot separated string, create each namespace according to the string. 
-    
+    Given a full namespace as a dot separated string, create each namespace according to the string.
+
     Returns the deepest namespace object in the string defined hierarchy.
     """
     symbol_table = currentProgram.getSymbolTable()
@@ -862,15 +764,9 @@ def prepare_namespace(namespace_str: str) -> Namespace:
 
 def prepare_data_type(type_string: str) -> DataType:
     """
-    Returns the datatype concerning a string argument - either by casting it to a ghidra built-in
-    datatype or by building the namespace of the RTTI type.
-
-    Parameters:
-        typeString (str): A string representing the datatype which shall be returned accordingly.
-
-    Returns:
-        ghidra.program.model.data.DataType: The datatype object, either built by a constructor or a
-            Ghidra built-in datatype.
+    Given a dot-separated string representation of the form NAMESPACE.CLASS_NAME, create a class in
+    the given namespace and return a pointer data type of the class. Alternatively, returns a Ghidra
+    internal datatype, if CLASS_NAME can be mapped directly to one.
     """
     global data_type_mapping
     data_types = currentProgram.getDataTypeManager()
@@ -892,9 +788,7 @@ def prepare_data_type(type_string: str) -> DataType:
         except DuplicateNameException:
             pass
 
-        category_path = CategoryPath(
-            "/" + class_namespace.getName(True).replace("::", "/")
-        )
+        category_path = CategoryPath("/" + class_namespace.getName(True).replace("::", "/"))
         data_type = StructureDataType(category_path, class_name, 0)
         registered_data_type = data_types.addDataType(data_type, None)
         final_data_type = PointerDataType(registered_data_type)
@@ -904,13 +798,9 @@ def prepare_data_type(type_string: str) -> DataType:
 
 def apply_function_names(function_entry_point: Address, function_name: str) -> int:
     """
-    Applies function name information for a specific function.
+    Apply function name information for a specific function.
 
-    Parameters:
-        function_entry_point (ghidra.program.model.address.Address): ...
-        function_name (str): ...
-    Returns:
-        int: An error code. A zero means that no return type was applied.
+    Returns 1 on a success or 0 if no function name was applied.
     """
     function_manager = currentProgram.getFunctionManager()
     function = function_manager.getFunctionAt(convert_to_addr(function_entry_point))
@@ -931,13 +821,9 @@ def apply_function_names(function_entry_point: Address, function_name: str) -> i
 
 def apply_namespaces(function_entry_point: Address, namespace: Namespace) -> int:
     """
-    Applies namespace information for a specific function.
+    Apply namespace information for a specific function.
 
-    Parameters:
-        function_entry_point (ghidra.program.model.address.Address): ...
-        namespace (str): ...
-    Returns:
-        int: An error code. A zero means that no return type was applied.
+    Returns 1 on a success or 0 if no namespace was applied.
     """
     function_manager = currentProgram.getFunctionManager()
     function = function_manager.getFunctionAt(convert_to_addr(function_entry_point))
@@ -953,13 +839,9 @@ def apply_namespaces(function_entry_point: Address, namespace: Namespace) -> int
 
 def apply_return_types(function_entry_point: Address, return_type_str: str) -> int:
     """
-    Applies return type information for a specific function.
+    Apply return type information for a specific function.
 
-    Parameters:
-        function_entry_point (ghidra.program.model.address.Address): ...
-        return_type_str (str): ...
-    Returns:
-        int: An error code. A zero means that no return type was applied.
+    Returns 1 on a success or 0 if no function name was applied.
     """
     if return_type_str is None:
         return 0
@@ -976,13 +858,10 @@ def apply_parameter_tuples(
     function_entry_point: Address, parameter_entries: dict[Address, ParameterInfo], namespace: str
 ) -> int:
     """
-    Applies parameter tuple (parameter type, parameter data type) information for a specific
+    Apply parameter tuple (parameter type, parameter data type) information for a specific
     function given ParamInfo data.
 
-    Parameters:
-        function_entry_point (ghidra.program.model.address.Address): ...
-    Returns:
-        int: An error code. A zero means failed application of a set of parameter tuples.
+    Returns 1 on a success or 0 if no function name was applied.
     """
     # prepare parameters
     params = []
@@ -1020,11 +899,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
     For every found VMT, the function iterates over every MethodEntry information and attempts to
     apply data like its name, parameter and return types and parameter names in Ghidra.
 
-    Parameters:
-        allSymbolInfo (VmtMdtMapping): Dataclass instance holding all previously gathered metadata.
-
-    Returns:
-        dict: Counts the numbers of VMTs, function names, and FQNs which have been fully recovered.
+    Returns: Counts of successfully recovered VMTs, FQNs, return types and parameter information.
     """
     apply_count = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "parameter_set": 0}
 
@@ -1069,14 +944,6 @@ def print_final_stats(
     """
     Print after-execution-statistics, including function counts, VMT counts and percentages of
     recovered symbolic information.
-
-    Parameters:
-        original_function_count (int): The number of functions as detected by the Ghidra API at the
-            start of execution.
-        total_function_count (int): The number of functions as detected by the Ghidra API after
-            the execution of symbol recovery.
-        vmt_addresses (list[Address]): The list of addresses of VMTs previously detected.
-        recovery_counts (dict[str, int]): A dictionary holding several statistical data.
     """
     info(f"[8/8] Statistics: Pre-execution number of functions: {original_function_count}")
     info(f"[8/8] Statistics: Post-execution number of functions: {total_function_count}")
@@ -1105,9 +972,9 @@ def print_final_stats(
     )
     info(
         f"[8/8] Statistics: Number of applied parameter sets: {recovery_counts['parameter_set']}, "
-        f"yielding {recovery_counts['parameter_set']/total_function_count*100:.2f}% of all functions; "
-        f"or {recovery_counts['parameter_set']/original_function_count*100:.2f}% when using "
-        "pre-execution function count."
+        f"yielding {recovery_counts['parameter_set']/total_function_count*100:.2f}% of all "
+        f"functions; or {recovery_counts['parameter_set']/original_function_count*100:.2f}% when "
+        "using pre-execution function count."
     )
 
     return
