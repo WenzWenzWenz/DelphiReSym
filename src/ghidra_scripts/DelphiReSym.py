@@ -1040,7 +1040,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
 
         if mdt_me_info.namespace is None or not mdt_me_info.namespace:
             continue
-        namespace, _ = prepare_namespace(mdt_me_info.namespace)
+        namespace, typename = prepare_namespace(mdt_me_info.namespace)
 
         for _, me_info in mdt_me_info.method_entries.items():
             check_cancel()
@@ -1049,7 +1049,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
                 continue
             apply_count["function"] += 1
 
-            if apply_namespaces(me_info.function_entry_point, namespace):
+            if apply_namespaces(me_info.function_entry_point, typename):
                 apply_count["fqn"] += 1
 
             if apply_return_types(me_info.function_entry_point, me_info.return_type_str):
