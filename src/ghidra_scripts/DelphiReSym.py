@@ -837,24 +837,16 @@ def parse_namespace(namespace_str: str):
     yield namespace_str[last_part_start:]
 
 
-class ParsedNamespace(NamedTuple):
-    namespace: Namespace
-    typename: str
-
-
-def prepare_namespace(namespace_str: str) -> ParsedNamespace:
+def prepare_namespace(namespace_str: str) -> Namespace:
     """
-    Create or retrieve a nested namespace hierarchy in Ghidra's symbol table from a namespace
-    string.
-
-    Given a VMT address and a dot-separated namespace string, this function iteratively creates or
-    retrieves each namespace component as a child of the previous one, starting from the global
-    namespace. Returns both the last created namespace and the name of the type.
+    Given a full namespace as a dot separated string, create each namespace according to the string. 
+    
+    Returns the deepest namespace object in the string defined hierarchy.
     """
     symbol_table = currentProgram.getSymbolTable()
     parent_namespace = currentProgram.getGlobalNamespace()
 
-    *parts, typename = parse_namespace(namespace_str)
+    parts = parse_namespace(namespace_str)
 
     for part in parts:
         check_cancel()
@@ -865,7 +857,7 @@ def prepare_namespace(namespace_str: str) -> ParsedNamespace:
         except InvalidInputException:
             return None
 
-    return ParsedNamespace(parent_namespace, typename)
+    return parent_namespace
 
 
 def prepare_data_type(type_string: str) -> DataType:
@@ -892,14 +884,16 @@ def prepare_data_type(type_string: str) -> DataType:
         final_data_type = data_type_mapping[type_string]()
     else:
         # create datatype
-        namespace, class_name = prepare_namespace(type_string)
+        namespace_obj = prepare_namespace(type_string)
+        class_namespace = namespace_obj.getParentNamespace()
+        class_name = namespace_obj.getName()
         try:
-            createClass(namespace, class_name)
+            createClass(class_namespace, class_name)
         except DuplicateNameException:
             pass
 
         category_path = CategoryPath(
-            "/" + namespace.getName(True).replace("::", "/")
+            "/" + class_namespace.getName(True).replace("::", "/")
         )
         data_type = StructureDataType(category_path, class_name, 0)
         registered_data_type = data_types.addDataType(data_type, None)
@@ -935,7 +929,7 @@ def apply_function_names(function_entry_point: Address, function_name: str) -> i
     return 1
 
 
-def apply_namespaces(function_entry_point: Address, namespace: str) -> int:
+def apply_namespaces(function_entry_point: Address, namespace: Namespace) -> int:
     """
     Applies namespace information for a specific function.
 
@@ -1040,7 +1034,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
 
         if mdt_me_info.namespace is None or not mdt_me_info.namespace:
             continue
-        namespace, typename = prepare_namespace(mdt_me_info.namespace)
+        namespace = prepare_namespace(mdt_me_info.namespace)
 
         for _, me_info in mdt_me_info.method_entries.items():
             check_cancel()
@@ -1049,7 +1043,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
                 continue
             apply_count["function"] += 1
 
-            if apply_namespaces(me_info.function_entry_point, typename):
+            if apply_namespaces(me_info.function_entry_point, namespace):
                 apply_count["fqn"] += 1
 
             if apply_return_types(me_info.function_entry_point, me_info.return_type_str):
