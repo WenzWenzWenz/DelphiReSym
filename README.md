@@ -8,7 +8,7 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 >
 > * The tool only works on **unpacked** Delphi binaries. Packed binaries will most likely not contain accessible metadata. Use a service like [UnpacMe by OALabs](https://www.unpac.me/) if needed.
 > * Internal Delphi types are currently mapped to generic pointers for readability only (see [TODOs](https://github.com/WenzWenzWenz/DelphiReSym/tree/main?tab=readme-ov-file#-roadmap)).
-> * Ghidra's decompilation and disassembly views currently only support template names of up to 10 characters. Hence, symbol recovered template names are not correctly shown in said views. They are being shown completely in the symbol tree view, however. Alternatively, you can also use functionalities like "Rename Function" on a function in decompiler view to check the entire name of the function's namespace. 
+> * See bug report on Ghidra's issues page [here](https://github.com/NationalSecurityAgency/ghidra/issues/8567): Ghidra's decompilation and disassembly views currently only support template names of up to 10 characters. Hence, symbol recovered template names are not correctly shown in said views. They are being shown completely in the symbol tree view, however. Alternatively, you can also use functionalities like "Rename Function" on a function in decompiler view to check the entire name of the function's namespace. 
 
 
 ## 🛠️ How to run
