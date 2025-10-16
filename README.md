@@ -4,11 +4,11 @@ _DelphiReSym_ is a reverse engineering utility that reconstructs **fully qualifi
 
 _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to ease the reverse engineering process of Delphi malware and legacy applications by restoring as much human-readable semantic context as possible.
 
-> ⚠️ **Limitations**:
+> ⚠️ **Limitations & known bugs**:
 >
 > * The tool only works on **unpacked** Delphi binaries. Packed binaries will most likely not contain accessible metadata. Use a service like [UnpacMe by OALabs](https://www.unpac.me/) if needed.
 > * Internal Delphi types are currently mapped to generic pointers for readability only (see [TODOs](https://github.com/WenzWenzWenz/DelphiReSym/tree/main?tab=readme-ov-file#-roadmap)).
-
+> * Ghidra's decompilation and disassembly views currently only support template names of up to 10 characters. Hence, symbol recovered template names are not correctly shown in said views. They are being shown completely in the symbol tree view, however. Alternatively, you can also use functionalities like "Rename Function" on a function in decompiler view to check the entire name of the function's namespace. 
 
 
 ## 🛠️ How to run
@@ -94,7 +94,7 @@ Certain Delphi versions use **incompatible metadata formats**, which are not yet
 The visual timeline illustrates the assumed format divergences, under the assumption that Delphi 2009 is not supported. Sections marked **red** and **yellow** in that timeline are unsupported and might have a more fine-grained format change history.
 ![alt text](https://github.com/WenzWenzWenz/ghidra_scripts/blob/main/timeline.png) "Figure 1.: Overview of the various changes in Delphi's file format aligned to its historical timeline.")
 
-For an in-depth explanation of Delphi's executable format evolution, refer to my [Master’s thesis](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/Academic_work.pdf).
+For an in-depth explanation of Delphi's executable format evolution, refer to my [academic work](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/Academic_work.pdf).
 
 
 
@@ -124,7 +124,7 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
    - [ ] Evaluate efficacy for old samples of Malware families.
    - [ ] Integrate logging functionality for errors.
 - [ ] Integrate Ghidra [headless mode](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)
-- [ ] Update ">" "<>" RTTI_Class name parsing & dedup similar RTTI_Class type names
+- [X] Implement parser for Delphi templates
 - [ ] Feature: replace typecasts with actual RTTI datatype structures (credit goes to [@huettenhain](https://github.com/huettenhain)!)
 
 
