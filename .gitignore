@@ -218,3 +218,5 @@ src/bin/
 
 # Other
 src/ghidra_scripts/orphan.py
+src/ghidra_scripts/Minimal.py
+src/ghidra_scripts/RDParser.py
