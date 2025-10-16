@@ -12,8 +12,8 @@ A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstru
 function signatures.
 """
 
-import pyghidra
 from __future__ import annotations
+import pyghidra
 from typing import TYPE_CHECKING, cast, Optional, Any
 from dataclasses import dataclass, field
 if TYPE_CHECKING:
@@ -85,6 +85,10 @@ VERBOSE_DEBUG = False
 VERBOSE_INFO = True
 # set whether or not to print warning information to stdout
 VERBOSE_WARNING = False
+
+# set whether or not to show entire namespaces of all types within templates (in symbol tree view)
+# setting this to False may sometimes yield template names within Ghidra's namespace character limit
+SHOW_ENTIRE_TEMPLATE_NAMESPACES = True
 
 # TODO: work on: non exhaustive list of non-RTTI dependant types and make this feature toggleable
 data_type_mapping = {
@@ -715,30 +719,85 @@ def traverse_method_entries(
 
 
 ###################################################################################################
+#    PARSING LOGIC - needed for processing tempaltes                                              #
+###################################################################################################
+class RecursiveDescentParser:
+    """
+    Given a dot separated namespace string, upon calling the class method 'parse_fqn()', return the
+    parts of the namespace string in hierarchically decending order. This parsing methodology is
+    template-aware. Sadly, due to visualization bugs in Ghidra's decompilation view, template names
+    which are longer than 10 characters are not shown correctly in decompiler view.
+
+    EBNF-Grammar:
+        fqn = namespace , { "." , namespace } , [ template ] ;
+        template = "<" , fqn { "," , fqn } , ">" ;
+        namespace = letter | "_" , { letter | digit | "_" } ;
+        letter = "A" ... "Z" | "a" ... "z" ;
+        digit = "0" ... "9" ;
+    """
+
+    def __init__(self, input_string: str) -> None:
+        self.string = input_string
+        self.pos = 0
+
+    def _peek(self) -> Optional[str]:
+        return self.string[self.pos] if self.pos < len(self.string) else None
+
+    def _consume(self, expected_char: Optional[str] = None) -> None:
+        peeked_char = self._peek()
+        if expected_char and expected_char != peeked_char:
+            raise ValueError(f"Unexpected character during parsing: {self.string[self.pos]=}.")
+        self.pos += 1
+
+    # fqn = namespace , { "." , namespace } , [ template ] ;
+    def parse_fqn(self, trim_mode: bool = False) -> tuple[list[str], str]:
+        namespaces = [self._parse_namespace()]
+        while self._peek() == ".":
+            self._consume(".")
+            namespaces.append(self._parse_namespace())
+
+        transmuted_fqn = namespaces[-1] if trim_mode else ".".join(namespaces)
+
+        if self._peek() == "<":
+            trimmed_template = self._parse_template()
+            namespaces[-1] += trimmed_template
+            transmuted_fqn += trimmed_template
+
+        return namespaces, transmuted_fqn
+
+    # template = "<" , fqn { "," , fqn } , ">" ;
+    def _parse_template(self) -> str:
+        self._consume("<")
+        _, trimmed_namespace = self.parse_fqn(
+            trim_mode=True if not SHOW_ENTIRE_TEMPLATE_NAMESPACES else False
+        )
+        while self._peek() == ",":
+            self._consume(",")
+            _, next_trimmed_namespace = self.parse_fqn(
+                trim_mode=True if not SHOW_ENTIRE_TEMPLATE_NAMESPACES else False
+            )
+            trimmed_namespace += "," + next_trimmed_namespace
+        self._consume(">")
+
+        return "<" + trimmed_namespace + ">"
+
+    # namespace = letter | "_" , { letter | digit } ;
+    def _parse_namespace(self) -> str:
+        namespace_start_pos = self.pos
+        if not self._peek().isalpha() and not self._peek() == "_":
+            raise ValueError(
+                f"First part of namespace is not alphabetical or underscore: "
+                f"{self.string[self.pos]=}, {self.string=}."
+            )
+        self._consume()
+        while self._peek() is not None and (self._peek().isalnum() or self._peek() == "_"):
+            self._consume()
+        return self.string[namespace_start_pos : self.pos]
+
+
+###################################################################################################
 #    MAIN LOGIC - TRANSFORMATION FUNCTIONS                                                        #
 ###################################################################################################
-def parse_namespace(namespace_str: str):
-    """
-    Given a dot separated namespace string, return a generator object yielding the parts of the
-    namespace string in hierarchically decending order. This parsing method is template-aware.
-    """
-    bracket_counter = 0
-    last_part_start = 0
-    for k, token in enumerate(namespace_str):
-        if token == "<":
-            bracket_counter += 1
-            continue
-        if token == ">":
-            if bracket_counter <= 0:
-                raise RuntimeError(f"Invalid namespace: {namespace_str}")
-            bracket_counter -= 1
-        if token == ".":
-            if bracket_counter == 0:
-                yield namespace_str[last_part_start:k]
-                last_part_start = k + 1
-    yield namespace_str[last_part_start:]
-
-
 def prepare_namespace(namespace_str: str) -> Namespace:
     """
     Given a full namespace as a dot separated string, create each namespace according to the string.
@@ -747,8 +806,9 @@ def prepare_namespace(namespace_str: str) -> Namespace:
     """
     symbol_table = currentProgram.getSymbolTable()
     parent_namespace = currentProgram.getGlobalNamespace()
-
-    parts = parse_namespace(namespace_str)
+    
+    parser = RecursiveDescentParser(namespace_str)
+    parts, _ = parser.parse_fqn()
 
     for part in parts:
         check_cancel()
