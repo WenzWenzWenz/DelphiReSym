@@ -17,7 +17,7 @@ import pyghidra
 from typing import TYPE_CHECKING, cast, Optional, Any
 from dataclasses import dataclass, field
 if TYPE_CHECKING:
-    from ghidra.ghidra_builtins import *                                        # type: ignore
+    from ghidra.ghidra_builtins import createFunction, createClass              # type: ignore
 from ghidra.program.model.symbol import SourceType, Namespace                   # type: ignore
 from ghidra.program.model.listing import ParameterImpl, Function, Program       # type: ignore
 from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock # type: ignore
