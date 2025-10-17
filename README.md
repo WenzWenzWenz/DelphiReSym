@@ -4,11 +4,6 @@ _DelphiReSym_ is a reverse engineering utility that reconstructs **fully qualifi
 
 _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to ease the reverse engineering process of Delphi malware and legacy applications by restoring as much human-readable semantic context as possible.
 
-> ⚠️ **Limitations & known bugs**:
->
-> * The tool only works on **unpacked** Delphi binaries. Packed binaries will most likely not contain accessible metadata. Use a service like [UnpacMe by OALabs](https://www.unpac.me/) if needed.
-> * Internal Delphi types are currently mapped to generic pointers for readability only (see [TODOs](https://github.com/WenzWenzWenz/DelphiReSym/tree/main?tab=readme-ov-file#-roadmap)).
-> * See bug report on Ghidra's issues page [here](https://github.com/NationalSecurityAgency/ghidra/issues/8567): Ghidra's decompilation and disassembly views currently only support template names of up to 10 characters. Hence, symbol recovered template names are not correctly shown in said views. They are being shown completely in the symbol tree view, however. Alternatively, you can also use functionalities like "Rename Function" on a function in decompiler view to check the entire name of the function's namespace. 
 
 
 ## 🛠️ How to run
@@ -50,7 +45,6 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 
 
 
-
 ## ✅ Supported Delphi versions
 
 _DelphiReSym_ supports the following Delphi versions, which share compatible metadata formats:
@@ -73,18 +67,13 @@ _DelphiReSym_ supports the following Delphi versions, which share compatible met
 * Delphi 11 Alexandria
 * Delphi 12 Athens
 
-
 Versions beyond Delphi 12 **may** work, **provided** they retain the same compiler metadata format.
-
-
 
 
 
 ## 🧪 How to find out if my Delphi executable version is supported?
 
 You can try using the [DIE (Detect It Easy)](https://github.com/horsicq/Detect-It-Easy) tool to get a rough guess of the Delphi version. However, the most reliable approach is to **simply run the tool** – if the version is unsupported, it will fail immediately, before any changes are made to your Ghidra project.
-
-
 
 
 
@@ -95,12 +84,6 @@ The visual timeline illustrates the assumed format divergences, under the assump
 ![alt text](https://github.com/WenzWenzWenz/ghidra_scripts/blob/main/timeline.png) "Figure 1.: Overview of the various changes in Delphi's file format aligned to its historical timeline.")
 
 For an in-depth explanation of Delphi's executable format evolution, refer to my [academic work](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/Academic_work.pdf).
-
-
-
-
-
-
 
 
 
@@ -116,6 +99,14 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
   *Note*: The actual accuracy for total parameter **tuples** is higher, since each function may have multiple parameters.
 
 
+
+## ⚠️ Limitations & known bugs:
+* The tool only works on **unpacked** Delphi binaries. Packed binaries will most likely not contain accessible metadata. Use a service like [UnpacMe by OALabs](https://www.unpac.me/) if needed.
+* Internal Delphi types are currently mapped to generic pointers for readability only (see [TODOs](https://github.com/WenzWenzWenz/DelphiReSym/tree/main?tab=readme-ov-file#-roadmap)).
+* If you encounter problems when displaying template names, refer to [this issue](https://github.com/WenzWenzWenz/DelphiReSym/issues/2): Ghidra's decompilation and disassembly views only display template names of up to 10 characters by default. However, changing it within the settings solves the problem. 
+
+
+
 ## 📝 Roadmap
 
 - [ ] *Current: Enhance script's general prettiness* ✨
@@ -125,7 +116,8 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
    - [ ] Integrate logging functionality for errors.
 - [ ] Integrate Ghidra [headless mode](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)
 - [X] Implement parser for Delphi templates
-- [ ] Feature: replace typecasts with actual RTTI datatype structures (credit goes to [@huettenhain](https://github.com/huettenhain)!)
+- [X] Several bug fixes
+- [ ] *Current: Feature replace typecasts with actual RTTI datatype structures (credit goes to [@huettenhain](https://github.com/huettenhain)!)*
 
 
 
