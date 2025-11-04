@@ -14,10 +14,10 @@ function signatures.
 
 from __future__ import annotations
 import pyghidra
-from typing import TYPE_CHECKING, cast, Optional, Any
+from typing import TYPE_CHECKING, cast, Optional, Any, NamedTuple
 from dataclasses import dataclass, field
 if TYPE_CHECKING:
-    from ghidra.ghidra_builtins import createFunction, createClass              # type: ignore
+    from ghidra.ghidra_builtins import createFunction, createClass, getFunctionAt              # type: ignore
 from ghidra.program.model.symbol import SourceType, Namespace                   # type: ignore
 from ghidra.program.model.listing import ParameterImpl, Function, Program       # type: ignore
 from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock # type: ignore
@@ -25,12 +25,7 @@ from ghidra.program.model.address import Address, AddressOutOfBoundsException   
 from ghidra.util.task import TaskMonitor                                        # type: ignore
 from ghidra.util.exception import InvalidInputException, DuplicateNameException # type: ignore
 from ghidra.program.model.data import (                                         # type: ignore
-    IntegerDataType,
-    CharDataType,
-    StructureDataType,
-    PascalUnicodeDataType,
-)
-from ghidra.program.model.data import (                                         # type: ignore
+    DataTypeConflictHandler,
     DataType,
     PointerDataType,
     BooleanDataType,
@@ -43,6 +38,8 @@ from ghidra.program.model.data import (                                         
     UnsignedIntegerDataType,
     ByteDataType,
     CategoryPath,
+    StructureDataType,
+    PascalUnicodeDataType,
 )
 
 
@@ -88,6 +85,10 @@ VERBOSE_WARNING = False
 
 # set whether or not to show entire namespaces of all types within templates (in symbol tree view)
 SHOW_ENTIRE_TEMPLATE_NAMESPACES = True
+
+# set whether or not to extract virtual methods and store them to additionally created
+# "VT_<structname>" structures
+VT_CREATION = True
 
 # TODO: work on: non exhaustive list of non-RTTI dependant types and make this feature toggleable
 data_type_mapping = {
@@ -805,7 +806,7 @@ def prepare_namespace(namespace_str: str) -> Namespace:
     """
     symbol_table = currentProgram.getSymbolTable()
     parent_namespace = currentProgram.getGlobalNamespace()
-    
+
     parser = RecursiveDescentParser(namespace_str)
     parts, _ = parser.parse_fqn()
 
@@ -821,11 +822,69 @@ def prepare_namespace(namespace_str: str) -> Namespace:
     return parent_namespace
 
 
-def prepare_data_type(type_string: str) -> DataType:
+def add_virtual_data_type(
+    data_type: DataType,
+    vmt_addr: Address,
+    data_type_name: str,
+    settings: ArchitectureSpecificSettings,
+) -> None:
+    """
+    Extract virtual function information from VMT base addresses and create new structs (named with
+    prefix "VT_") into Ghidra's data type manager containing said information.
+    """
+    if VT_CREATION == False:
+        return
+
+    data_types = currentProgram.getDataTypeManager()
+    ptr_size = settings.ptr_size
+    vt_data_type_name = "VT_" + data_type_name
+    data_type_comment = "A pointer to the corresponding VT structure."
+    vt_data_type_comment = "Recovered by DelphiReSym."
+
+    # insert virtual functions
+    vt_data_type = StructureDataType(CategoryPath("/"), vt_data_type_name, 0)
+    for i in range(11, 22):  # TODO 64 bit support for those weird three addresses?
+        function_address = read_ptr(vmt_addr.add(ptr_size * i), ptr_size)
+        function = getFunctionAt(function_address)
+        if function is None:
+            function = createFunction(function_address, None)
+        vt_data_type.insertAtOffset(
+            ptr_size * i,
+            PointerDataType(function.getSignature()),
+            ptr_size,
+            getFunctionAt(function_address).getName(),
+            vt_data_type_comment,
+        )
+
+    vt_data_type = data_types.addDataType(
+        vt_data_type, DataTypeConflictHandler.REPLACE_HANDLER
+    )
+    vt_pointer_data_type = PointerDataType(vt_data_type)
+
+    if data_type.getNumComponents() > 0:
+        data_type.replace(
+            0, vt_pointer_data_type, ptr_size, vt_data_type_name, data_type_comment
+        )
+    else:
+        data_type.add(
+            vt_pointer_data_type, ptr_size, vt_data_type_name, data_type_comment
+        )
+
+
+class DataTypeInformation(NamedTuple):
+    data_type: DataType
+    namespace: Namespace
+
+
+def prepare_data_type(
+    type_string: str,
+    vmt_addr: Optional[Address] = None,
+    settings: Optional[ArchitectureSpecificSettings] = None,
+) -> DataTypeInformation:
     """
     Given a dot-separated string representation of the form NAMESPACE.CLASS_NAME, create a class in
-    the given namespace and return a pointer data type of the class. Alternatively, returns a Ghidra
-    internal datatype, if CLASS_NAME can be mapped directly to one.
+    the given namespace and return a NamedTuple containing the created datatype and namespace.
+    Alternatively, returns a Ghidra internal datatype, if CLASS_NAME can be mapped directly to one.
     """
     global data_type_mapping
     data_types = currentProgram.getDataTypeManager()
@@ -837,8 +896,9 @@ def prepare_data_type(type_string: str) -> DataType:
     if type_string in data_type_mapping:
         # ghidra built-in simple datatypes
         final_data_type = data_type_mapping[type_string]()
+        namespace_obj = currentProgram.getGlobalNamespace()
     else:
-        # create datatype
+        # create base datatype and virtual (vt) datatype
         namespace_obj = prepare_namespace(type_string)
         class_namespace = namespace_obj.getParentNamespace()
         class_name = namespace_obj.getName()
@@ -847,12 +907,21 @@ def prepare_data_type(type_string: str) -> DataType:
         except DuplicateNameException:
             pass
 
-        category_path = CategoryPath("/" + class_namespace.getName(True).replace("::", "/"))
-        data_type = StructureDataType(category_path, class_name, 0)
-        registered_data_type = data_types.addDataType(data_type, None)
+        data_type_path = CategoryPath(
+            "/" + class_namespace.getName(True).replace("::", "/")
+        )
+        data_type = StructureDataType(data_type_path, class_name, 0)
+        registered_data_type = data_types.addDataType(
+            data_type,
+            DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER,
+        )
+
+        if vmt_addr:
+            add_virtual_data_type(registered_data_type, vmt_addr, class_name, settings)
+
         final_data_type = PointerDataType(registered_data_type)
 
-    return final_data_type
+    return DataTypeInformation(final_data_type, namespace_obj)
 
 
 def apply_function_names(function_entry_point: Address, function_name: str) -> int:
@@ -908,7 +977,7 @@ def apply_return_types(function_entry_point: Address, return_type_str: str) -> i
     function_manager = currentProgram.getFunctionManager()
     function = function_manager.getFunctionAt(convert_to_addr(function_entry_point))
 
-    return_data_type_object = prepare_data_type(return_type_str)
+    return_data_type_object = prepare_data_type(return_type_str).data_type
     function.setReturnType(return_data_type_object, SourceType.USER_DEFINED)
     return 1
 
@@ -930,7 +999,7 @@ def apply_parameter_tuples(
             if parameter_info.rtti_namespace is None or parameter_info.parameter_name == "Self"
             else parameter_info.rtti_namespace
         )
-        final_data_type = prepare_data_type(rtti_name)
+        final_data_type = prepare_data_type(rtti_name).data_type
         param = ParameterImpl(parameter_info.parameter_name, final_data_type, currentProgram)
         params.append(param)
 
@@ -951,7 +1020,7 @@ def apply_parameter_tuples(
     return 1
 
 
-def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
+def apply_symbols(all_symbol_info: VmtMdtMapping, settings: ArchitectureSpecificSettings) -> dict[str, int]:
     """
     Handles the actual symbol name recovering, given all previously gathered information.
 
@@ -968,7 +1037,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
 
         if mdt_me_info.namespace is None or not mdt_me_info.namespace:
             continue
-        namespace = prepare_namespace(mdt_me_info.namespace)
+        namespace = prepare_data_type(mdt_me_info.namespace, vmt, settings).namespace
 
         for _, me_info in mdt_me_info.method_entries.items():
             check_cancel()
@@ -1069,7 +1138,7 @@ def main() -> None:
     all_symbols = add_namespace_information(vmt_rtti_relations, vmt_mdt_symbols, settings)
 
     info("[7/8] Reconstructing all symbol names...")
-    recovery_counts = apply_symbols(all_symbols)
+    recovery_counts = apply_symbols(all_symbols, settings)
 
     total_function_count = currentProgram.getFunctionManager().getFunctionCount()
     print_final_stats(original_function_count, total_function_count, vmt_addresses, recovery_counts)
