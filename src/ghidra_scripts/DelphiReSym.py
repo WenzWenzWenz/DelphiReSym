@@ -87,7 +87,6 @@ VERBOSE_INFO = True
 VERBOSE_WARNING = False
 
 # set whether or not to show entire namespaces of all types within templates (in symbol tree view)
-# setting this to False may sometimes yield template names within Ghidra's namespace character limit
 SHOW_ENTIRE_TEMPLATE_NAMESPACES = True
 
 # TODO: work on: non exhaustive list of non-RTTI dependant types and make this feature toggleable
@@ -964,7 +963,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping) -> dict[str, int]:
     apply_count = {"vmt": 0, "function": 0, "fqn": 0, "return": 0, "parameter_set": 0}
 
     for vmt, mdt_me_info in all_symbol_info.entries.items():
-        debug(f"[7/8] Currently proceessing symbol information for VMT @ {vmt} ...")
+        debug(f"[7/8] Currently processing symbol information for VMT @ {vmt} ...")
         apply_count["vmt"] += 1
 
         if mdt_me_info.namespace is None or not mdt_me_info.namespace:
