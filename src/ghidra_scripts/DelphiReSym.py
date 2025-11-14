@@ -352,11 +352,16 @@ class ParameterInfo:
 
 @dataclass
 class MeInfo:
-    function_entry_point: Optional[Address] = 0
-    function_name: Optional[str] = ""
+    function_entry_point: Address
+    function_name: Optional[str] = None
     return_type_at: Optional[Address | str] = "n.a."
-    return_type_str: Optional[str] = "void"
+    return_type_str: Optional[str] = None
     parameter_entries: dict[Address, ParameterInfo] = field(default_factory=dict)
+
+    def get_return_type_string(self) -> str:
+        if (type_string := self.return_type_str) is None:
+            return 'void'
+        return type_string
 
 
 @dataclass
@@ -449,7 +454,7 @@ def get_method_entries(
             warning(f"Could not read bytes @ {current_method_entry_ref_field}. Skipping.")
             continue
 
-        info.method_entries[current_method_entry_addr] = MeInfo()
+        info.method_entries[current_method_entry_addr] = MeInfo(current_method_entry_addr)
 
     return info
 
