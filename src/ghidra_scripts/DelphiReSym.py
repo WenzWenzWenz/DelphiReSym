@@ -920,7 +920,7 @@ def prepare_data_type(
             DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER,
         )
 
-        if vmt_addr:
+        if vmt_addr and settings is not None:
             add_virtual_data_type(registered_data_type, vmt_addr, class_name, settings)
 
         final_data_type = PointerDataType(registered_data_type)
