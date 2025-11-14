@@ -83,6 +83,9 @@ VERBOSE_INFO = True
 # set whether or not to print warning information to stdout
 VERBOSE_WARNING = False
 
+# set whether or not to profile the script
+ENABLE_PROFILING = False
+
 # set whether or not to show entire namespaces of all types within templates (in symbol tree view)
 SHOW_ENTIRE_TEMPLATE_NAMESPACES = True
 
@@ -1150,7 +1153,23 @@ def main() -> None:
 
 
 if pyghidra.started():
+    if ENABLE_PROFILING:
+        import yappi
+        yappi.set_clock_type("wall")
+        yappi.start()
+    else:
+        yappi = None
     try:
         main()
     except MonitorCancel:
         pass
+    except Exception:
+        raise
+    finally:
+        if yappi is not None:
+            import pathlib
+            path = pathlib.Path(__file__)
+            path = path.parent / f"{path.stem}.perf"
+            info(f"profiling information has been written to: {path.absolute()}")
+            stats = yappi.get_func_stats()
+            stats.save(path, type="CALLGRIND")
