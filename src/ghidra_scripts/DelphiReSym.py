@@ -1032,7 +1032,7 @@ def apply_parameter_tuples(
             Function.FunctionUpdateType.DYNAMIC_STORAGE_ALL_PARAMS,
             True,
             SourceType.USER_DEFINED,
-            params,
+            *params,
         )
     # skip in case of invalid symbol names
     except InvalidInputException:
