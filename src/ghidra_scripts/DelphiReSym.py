@@ -11,13 +11,15 @@
 A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstruct symbols of
 function signatures.
 """
-
 from __future__ import annotations
 import pyghidra
+
 from typing import TYPE_CHECKING, cast, Optional, Any, NamedTuple
 from dataclasses import dataclass, field
+
 if TYPE_CHECKING:
     from ghidra.ghidra_builtins import createFunction, createClass, getFunctionAt              # type: ignore
+
 from ghidra.program.model.symbol import SourceType, Namespace                   # type: ignore
 from ghidra.program.model.listing import ParameterImpl, Function, Program       # type: ignore
 from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock # type: ignore
@@ -33,7 +35,6 @@ from ghidra.program.model.data import (                                         
     DoubleDataType,
     IntegerDataType,
     ShortDataType,
-    PointerDataType,
     CharDataType,
     UnsignedIntegerDataType,
     ByteDataType,
@@ -305,7 +306,7 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
             progress = current_address.subtract(settings.text_block_start_addr)
             if progress % 100000 == 0:
                 info(
-                    f"[1/8] Processed {round((progress/text_block_size)*100)}% addresses in .text "
+                    f"[1/8] Processed {round((progress / text_block_size) * 100)}% addresses in .text "
                     "section."
                 )
 
@@ -406,7 +407,7 @@ def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) 
 
 
 def add_namespace_information(
-    vmt_rtti_relations: dict, symbol_info: VmtMdtMapping, settings: dict
+    vmt_rtti_relations: dict, symbol_info: VmtMdtMapping, settings: ArchitectureSpecificSettings
 ) -> VmtMdtMapping:
     """
     Augment symbol information with the namespace string derived via RTTI traversal. The function
@@ -835,7 +836,7 @@ def add_virtual_data_type(
     Extract virtual function information from VMT base addresses and create new structs (named with
     prefix "VT_") into Ghidra's data type manager containing said information.
     """
-    if VT_CREATION == False:
+    if VT_CREATION is False:
         return
 
     data_types = currentProgram.getDataTypeManager()
@@ -927,7 +928,7 @@ def prepare_data_type(
     return DataTypeInformation(final_data_type, namespace_obj)
 
 
-def apply_function_names(function_entry_point: Address, function_name: str) -> int:
+def apply_function_names(function_entry_point: Address, function_name: str | None) -> int:
     """
     Apply function name information for a specific function.
 
@@ -1044,19 +1045,20 @@ def apply_symbols(all_symbol_info: VmtMdtMapping, settings: ArchitectureSpecific
 
         for _, me_info in mdt_me_info.method_entries.items():
             check_cancel()
+            entry = me_info.function_entry_point
 
-            if not apply_function_names(me_info.function_entry_point, me_info.function_name):
+            if not apply_function_names(entry, me_info.function_name):
                 continue
             apply_count["function"] += 1
 
-            if apply_namespaces(me_info.function_entry_point, namespace):
+            if apply_namespaces(entry, namespace):
                 apply_count["fqn"] += 1
 
-            if apply_return_types(me_info.function_entry_point, me_info.return_type_str):
+            if apply_return_types(entry, me_info.get_return_type_string()):
                 apply_count["return"] += 1
 
             if apply_parameter_tuples(
-                me_info.function_entry_point, me_info.parameter_entries, mdt_me_info.namespace
+                entry, me_info.parameter_entries, mdt_me_info.namespace
             ):
                 apply_count["parameter_set"] += 1
 
@@ -1085,26 +1087,26 @@ def print_final_stats(
     )
     info(
         f"[8/8] Statistics: Number of symbol recovered functions: {recovery_counts['function']}, "
-        f"yielding {recovery_counts['function']/total_function_count*100:.2f}% of all functions; "
-        f"or {recovery_counts['function']/original_function_count*100:.2f}% when using "
+        f"yielding {recovery_counts['function'] / total_function_count * 100:.2f}% of all functions; "
+        f"or {recovery_counts['function'] / original_function_count * 100:.2f}% when using "
         "pre-execution function count."
     )
     info(
         f"[8/8] Statistics: Number of applied FQNs: {recovery_counts['fqn']}, yielding "
-        f"{recovery_counts['fqn']/total_function_count*100:.2f}% of all functions; or "
-        f"{recovery_counts['fqn']/original_function_count*100:.2f}% when using pre-execution "
+        f"{recovery_counts['fqn'] / total_function_count * 100:.2f}% of all functions; or "
+        f"{recovery_counts['fqn'] / original_function_count * 100:.2f}% when using pre-execution "
         "function count."
     )
     info(
         f"[8/8] Statistics: Number of applied return types: {recovery_counts['return']}, yielding "
-        f"{recovery_counts['return']/total_function_count*100:.2f}% of all functions; or "
-        f"{recovery_counts['return']/original_function_count*100:.2f}% when using pre-execution "
+        f"{recovery_counts['return'] / total_function_count * 100:.2f}% of all functions; or "
+        f"{recovery_counts['return'] / original_function_count * 100:.2f}% when using pre-execution "
         "function count."
     )
     info(
         f"[8/8] Statistics: Number of applied parameter sets: {recovery_counts['parameter_set']}, "
-        f"yielding {recovery_counts['parameter_set']/total_function_count*100:.2f}% of all "
-        f"functions; or {recovery_counts['parameter_set']/original_function_count*100:.2f}% when "
+        f"yielding {recovery_counts['parameter_set'] / total_function_count * 100:.2f}% of all "
+        f"functions; or {recovery_counts['parameter_set'] / original_function_count * 100:.2f}% when "
         "using pre-execution function count."
     )
 
@@ -1149,7 +1151,7 @@ def main() -> None:
 
     # the following two lines are for debugging purposes only
     global types
-    debug(types)
+    debug(str(types))
 
 
 if pyghidra.started():
