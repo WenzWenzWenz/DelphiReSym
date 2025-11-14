@@ -852,6 +852,8 @@ def add_virtual_data_type(
         function = getFunctionAt(function_address)
         if function is None:
             function = createFunction(function_address, None)
+        if function is None:
+            continue
         vt_data_type.insertAtOffset(
             ptr_size * i,
             PointerDataType(function.getSignature()),
