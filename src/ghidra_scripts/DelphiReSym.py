@@ -1078,12 +1078,20 @@ def print_final_stats(
     Print after-execution-statistics, including function counts, VMT counts and percentages of
     recovered symbolic information.
     """
+    if total_function_count == 0 or original_function_count == 0:
+        info("[8/8] Statistics: No functions found.")
+        return
+
     info(f"[8/8] Statistics: Pre-execution number of functions: {original_function_count}")
     info(f"[8/8] Statistics: Post-execution number of functions: {total_function_count}")
     info(f"[8/8] Statistics: Number of VMTs found: {len(vmt_addresses)}")
+    if not vmt_addresses:
+        total = 100
+    else:
+        total = recovery_counts['vmt'] / len(vmt_addresses) * 100
     info(
         f"[8/8] Statistics: Number of symbol recovered VMTs: {recovery_counts['vmt']}, yielding "
-        f"{recovery_counts['vmt']/len(vmt_addresses)*100:.2f}% of all found VMTs."
+        f"{total:.2f}% of all found VMTs."
     )
     info(
         f"[8/8] Statistics: Number of symbol recovered functions: {recovery_counts['function']}, "
