@@ -252,8 +252,11 @@ def check_vmt_candidate(
     addresses.append(next_struct)
 
     mdt_addr = candidate_addr.add(ptr_size * 6)
-    mdt = read_ptr(mdt_addr, ptr_size)
-    if mdt:
+    try:
+        mdt = read_ptr(mdt_addr, ptr_size)
+    except MemoryAccessException:
+        pass
+    else:
         addresses.append(mdt)
         # MDTs are located at higher addresses than their corresponding VMTs
         if mdt <= candidate_addr:
@@ -263,7 +266,10 @@ def check_vmt_candidate(
         # exclude the SafeCallExceptionMethod field since it is the only optional one of the 10
         if current_field_number != 14:
             current_field = candidate_addr.add(ptr_size * current_field_number)
-            addresses.append(read_ptr(current_field, ptr_size))
+            try:
+                addresses.append(read_ptr(current_field, ptr_size))
+            except MemoryAccessException:
+                pass
 
     return all(
         settings.text_block_start_addr
@@ -287,17 +293,21 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
     while current_address < settings.text_block_end_addr.subtract(settings.ptr_size - 1):
         check_cancel()
 
-        current_val = read_ptr(current_address, settings.ptr_size)
-        distance = current_val.subtract(current_address)
+        try:
+            current_val = read_ptr(current_address, settings.ptr_size)
+        except MemoryAccessException:
+            pass
+        else:
+            distance = current_val.subtract(current_address)
 
-        if distance == settings.jump_dist:
-            if not check_vmt_candidate(current_address, current_val, settings):
-                debug(f"REJECTED VMT candidate @ {current_address}. Didn't pass sanity checks.")
-                current_address = current_address.add(1)
-                continue
+            if distance == settings.jump_dist:
+                if not check_vmt_candidate(current_address, current_val, settings):
+                    debug(f"REJECTED VMT candidate @ {current_address}. Didn't pass sanity checks.")
+                    current_address = current_address.add(1)
+                    continue
 
-            vmt_addresses.append(current_address)
-            debug(f"VMT @ {current_address} passed sanity checks. Adding it to the list of VMTs.")
+                vmt_addresses.append(current_address)
+                debug(f"VMT @ {current_address} passed sanity checks. Adding it to the list of VMTs.")
 
         current_address = current_address.add(1)
 
