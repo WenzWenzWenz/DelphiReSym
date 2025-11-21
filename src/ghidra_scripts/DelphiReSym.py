@@ -841,6 +841,123 @@ def prepare_namespace(namespace_str: str) -> Namespace:
     return parent_namespace
 
 
+def add_data_to_vt_data_type(
+    vt_data_type: StructureDataType,
+    start_address: Address,
+    end_address: Address,
+    insertion_offset: int,
+    settings: ArchitectureSpecificSettings,
+) -> StructureDataType:
+    """
+    Given a (partially filled) virtual data type, insert data into it by iterating over a list of
+    functions located between known start and end addresses. Works on consecutive executions too.
+    """
+    ptr_size = settings.ptr_size
+    number_of_addresses = end_address.subtract(start_address) // ptr_size
+    vt_data_type_comment = "Recovered by DelphiReSym."
+
+    for i in range(number_of_addresses):
+        function_address = read_ptr(start_address.add(i * ptr_size), ptr_size)
+        function = getFunctionAt(function_address)
+        if function is None:
+            function = createFunction(function_address, None)
+        if function is None:
+            continue
+        vt_data_type.insertAtOffset(
+            (i + insertion_offset) * ptr_size,
+            PointerDataType(function.getSignature()),
+            ptr_size,
+            getFunctionAt(function_address).getName(),
+            vt_data_type_comment,
+        )
+
+    return vt_data_type
+
+
+def insert_virtual_functions_to_vt_data_type(
+    vt_data_type: StructureDataType,
+    vmt_addr: Address,
+    settings: ArchitectureSpecificSettings,
+) -> StructureDataType:
+    """
+    Basically calls add_data_to_vt_data_type() to insert the information about virtual functions to
+    the already existing virtual data type object containing information about inherited functions
+    and returns it.
+
+    The crux: The list of virtual functions of a VMT has a dynamic length, hence search the VMT for
+    references to table structures neighbouring the virtual functions at higher addresses first.
+
+    If no virtual functions for a VMT are detected, the unchanged virtual data type object gets
+    returned.
+    """
+    ptr_size = settings.ptr_size
+    virtual_functions_start_address = read_ptr(vmt_addr, ptr_size)
+
+    # use first mandatory field of VMT as a end marker of last resort
+    class_name_address = read_ptr(vmt_addr.add(8 * ptr_size), ptr_size)
+    current_table_address = class_name_address
+
+    for field_number in range(1, 8):
+        # skip VmtRtti field since it is stored at higher addresses
+        if field_number == 4:
+            continue
+
+        current_table_field = vmt_addr.add(ptr_size * field_number)
+        current_table_address = read_ptr(current_table_field, ptr_size)
+        # skip nil addresses for nonexistent tables
+        if current_table_address == 0:
+            continue
+
+        # case when there are no virtual funcs
+        if virtual_functions_start_address == current_table_address:
+            break
+
+        # filter out senseless table addresses
+        if not (current_table_address > virtual_functions_start_address):
+            current_table_address = class_name_address
+            if not (current_table_address > virtual_functions_start_address):
+                warning(
+                    f"A VMT-table's address is higher than the corresponding NextStruct field for "
+                    f"VMT@{vmt_addr}. Please contact the author and send them this addr "
+                    f"({vmt_addr}) and the executable."
+                )
+            continue
+
+        insertion_offset = 11 if ptr_size == 4 else 14
+        vt_data_type = add_data_to_vt_data_type(
+            vt_data_type=vt_data_type,
+            start_address=virtual_functions_start_address,
+            end_address=current_table_address,
+            insertion_offset=insertion_offset,
+            settings=settings,
+        )
+
+        break
+    else:
+        warning(
+            f"Used VMT-field 'ClassName' as an end marker for virtual funcs of VMT@{vmt_addr}"
+        )
+
+    return vt_data_type
+
+    # TODO first field before equals? jesko thinks this is part of VT - I don't think so (ParentVMT)
+
+    # TODO remove this later (only meant for explaining Jesko what I did)
+    # 1. check for all other table fields, what the smallest, non-nil, table start addr is that is larger than virtual funcs
+    # or
+    # 1. check other table positions in the following order, if any exists, break check and use that-ptr_size as end of virtual funcs
+    # IntfTable -> AutoTable -> InitTable -> FieldTable -> MethodTable -> DynamicTable
+    # what to do if there are no virtual functions for that vmt? just don't insert more data
+    # how to know that? => check if dereferenced VMT ADDR is the same as the first found table ADDR => no virtual functions found => skip
+    # 2. continue the insertAtOffset as above (but here are funcs that definitely are unknown, be aware of that)
+
+    # after this step, VT_TStringList structure should look well
+    # TODO now we need to insert in the residual function code below the functionality to automatically typedef component offset
+    # TODO 32bit has 0x30 (-4? => 0x2c) component offset for shifted pointers at class methods, 64bit has 0x60 (-8?) => 0x78 (=>0x58)? cuz three additional fields?
+    # think about whether or not this script is compatible to run twice in a row when adding virtual funcitons... seems to work?! wut
+    # TODO test on malware
+
+
 def add_virtual_data_type(
     data_type: DataType,
     vmt_addr: Address,
@@ -848,7 +965,7 @@ def add_virtual_data_type(
     settings: ArchitectureSpecificSettings,
 ) -> None:
     """
-    Extract virtual function information from VMT base addresses and create new structs (named with
+    Extract virtual function information from VMT base-addresses and create new structs (named with
     prefix "VT_") into Ghidra's data type manager containing said information.
     """
     if VT_CREATION is False:
@@ -858,24 +975,22 @@ def add_virtual_data_type(
     ptr_size = settings.ptr_size
     vt_data_type_name = "VT_" + data_type_name
     data_type_comment = "A pointer to the corresponding VT structure."
-    vt_data_type_comment = "Recovered by DelphiReSym."
 
-    # insert virtual functions
+    # insert data of inherited functions
     vt_data_type = StructureDataType(CategoryPath("/"), vt_data_type_name, 0)
-    for i in range(11, 22):  # TODO 64 bit support for those weird three addresses?
-        function_address = read_ptr(vmt_addr.add(ptr_size * i), ptr_size)
-        function = getFunctionAt(function_address)
-        if function is None:
-            function = createFunction(function_address, None)
-        if function is None:
-            continue
-        vt_data_type.insertAtOffset(
-            ptr_size * i,
-            PointerDataType(function.getSignature()),
-            ptr_size,
-            getFunctionAt(function_address).getName(),
-            vt_data_type_comment,
-        )
+    inherited_functions_start_address = vmt_addr.add(11 * ptr_size)
+    vt_data_type = add_data_to_vt_data_type(
+        vt_data_type=vt_data_type,
+        start_address=inherited_functions_start_address,
+        end_address=inherited_functions_start_address.add(11 * ptr_size),
+        insertion_offset=0,
+        settings=settings,
+    )
+
+    # insert data of virtual functions
+    vt_data_type = insert_virtual_functions_to_vt_data_type(
+        vt_data_type, vmt_addr, settings
+    )
 
     vt_data_type = data_types.addDataType(
         vt_data_type, DataTypeConflictHandler.REPLACE_HANDLER
@@ -884,11 +999,11 @@ def add_virtual_data_type(
 
     if data_type.getNumComponents() > 0:
         data_type.replace(
-            0, vt_pointer_data_type, ptr_size, vt_data_type_name, data_type_comment
+            0, vt_pointer_data_type, ptr_size, "VT", data_type_comment
         )
     else:
         data_type.add(
-            vt_pointer_data_type, ptr_size, vt_data_type_name, data_type_comment
+            vt_pointer_data_type, ptr_size, "VT", data_type_comment
         )
 
 
@@ -958,7 +1073,6 @@ def apply_function_names(function_entry_point: Address, function_name: str | Non
     if not function:
         # creating via the light-weight FlatProgramAPI function sets a name automatically
         function = createFunction(convert_to_addr(function_entry_point), function_name)
-        # function could not be created for some reason, hence skip its symbol recovery
         if function is None:
             return 0
     else:
