@@ -941,23 +941,6 @@ def insert_virtual_functions_to_vt_data_type(
 
     return vt_data_type
 
-    # TODO first field before equals? jesko thinks this is part of VT - I don't think so (ParentVMT)
-
-    # TODO remove this later (only meant for explaining Jesko what I did)
-    # 1. check for all other table fields, what the smallest, non-nil, table start addr is that is larger than virtual funcs
-    # or
-    # 1. check other table positions in the following order, if any exists, break check and use that-ptr_size as end of virtual funcs
-    # IntfTable -> AutoTable -> InitTable -> FieldTable -> MethodTable -> DynamicTable
-    # what to do if there are no virtual functions for that vmt? just don't insert more data
-    # how to know that? => check if dereferenced VMT ADDR is the same as the first found table ADDR => no virtual functions found => skip
-    # 2. continue the insertAtOffset as above (but here are funcs that definitely are unknown, be aware of that)
-
-    # after this step, VT_TStringList structure should look well
-    # TODO now we need to insert in the residual function code below the functionality to automatically typedef component offset
-    # TODO 32bit has 0x30 (-4? => 0x2c) component offset for shifted pointers at class methods, 64bit has 0x60 (-8?) => 0x78 (=>0x58)? cuz three additional fields?
-    # think about whether or not this script is compatible to run twice in a row when adding virtual funcitons... seems to work?! wut
-    # TODO test on malware
-
 
 def add_virtual_data_type(
     data_type: DataType,
