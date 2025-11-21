@@ -750,7 +750,7 @@ class RecursiveDescentParser:
     EBNF-Grammar:
         fqn = namespace , { "." , namespace } , [ template ] ;
         template = "<" , fqn { "," , fqn } , ">" ;
-        namespace = letter | "_" , { letter | digit | "_" } ;
+        namespace = letter | "_" , { letter | digit | "_" | ")" | "(" } ;
         letter = "A" ... "Z" | "a" ... "z" ;
         digit = "0" ... "9" ;
     """
@@ -800,7 +800,7 @@ class RecursiveDescentParser:
 
         return "<" + trimmed_namespace + ">"
 
-    # namespace = letter | "_" , { letter | digit } ;
+    # namespace = letter | "_" , { letter | digit | "_" | ")" | "(" } ;
     def _parse_namespace(self) -> str:
         namespace_start_pos = self.pos
         if not self._peek().isalpha() and not self._peek() == "_":
@@ -809,7 +809,8 @@ class RecursiveDescentParser:
                 f"{self.string[self.pos]=}, {self.string=}."
             )
         self._consume()
-        while self._peek() is not None and (self._peek().isalnum() or self._peek() == "_"):
+        while self._peek() is not None and (self._peek().isalnum() or self._peek() == "_" or
+                                            self._peek() == ")" or self._peek() == "("):
             self._consume()
         return self.string[namespace_start_pos : self.pos]
 
