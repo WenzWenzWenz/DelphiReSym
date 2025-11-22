@@ -41,6 +41,7 @@ from ghidra.program.model.data import (                                         
     CategoryPath,
     StructureDataType,
     PascalUnicodeDataType,
+    PointerTypedef,
 )
 
 
@@ -976,19 +977,24 @@ def add_virtual_data_type(
         vt_data_type, vmt_addr, settings
     )
 
+    # link data_type, vt_data_type, its pointer and the typedef on that with shifted pointer offset
     vt_data_type = data_types.addDataType(
         vt_data_type, DataTypeConflictHandler.REPLACE_HANDLER
     )
     vt_pointer_data_type = PointerDataType(vt_data_type)
-
+    component_offset = 0x2C if ptr_size == 4 else 0x58
+    typedef_data_type = PointerTypedef(
+        vt_data_type_name + "_shiftedPtr",
+        vt_pointer_data_type,
+        ptr_size,
+        data_types,
+        component_offset,
+    )
+    data_types.addDataType(typedef_data_type, DataTypeConflictHandler.REPLACE_HANDLER)
     if data_type.getNumComponents() > 0:
-        data_type.replace(
-            0, vt_pointer_data_type, ptr_size, "VT", data_type_comment
-        )
+        data_type.replace(0, vt_pointer_data_type, ptr_size, "VT", data_type_comment)
     else:
-        data_type.add(
-            vt_pointer_data_type, ptr_size, "VT", data_type_comment
-        )
+        data_type.add(vt_pointer_data_type, ptr_size, "VT", data_type_comment)
 
 
 class DataTypeInformation(NamedTuple):
