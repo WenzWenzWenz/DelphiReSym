@@ -1,6 +1,6 @@
 # DelphiReSym – A Delphi Symbol Name Recovery Tool for Reverse Engineers
 
-_DelphiReSym_ is a reverse engineering utility that reconstructs **fully qualified Delphi symbol names** from after-compilation metadata embedded in Delphi executables. This includes function names, return types, parameter types, and parameter names.
+_DelphiReSym_ is a reverse engineering utility that reconstructs **fully qualified Delphi symbol names** from after-compilation metadata embedded in Delphi executables. This includes function names, return types, parameter types, and parameter names. With the next release, the tool will also be able to auto create VMTs and add them to Ghidra's Data Type Manager.
 
 _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to ease the reverse engineering process of Delphi malware and legacy applications by restoring as much human-readable semantic context as possible.
 
@@ -19,20 +19,20 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 2. **Import the binary you want to analyse and open it in Ghidra's CodeBrowser** (🐉 button).
 
 3. **(Optional)**: Let Ghidra complete its **Auto Analysis**.
-   The tool has been tested post-analysis without issues. Executing it Pre-Auto-Analysis, the statistics of _DelphiReSym_ upon successful execution might be incorrectly inflated.
+   The tool has been tested post-analysis without issues. Executing it pre-auto-analysis though has a negative effect on the accuracy of statistics which _DelphiReSym_ prints upon successful execution (but not on the reversing logic).
 
 4. **Load the script**:
 
    * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version) *(or the main branch, but that one might not be stable)*.
-   * Go to **Window > Script Manager** (green ▶️ button).
+   * Go to **Window > Script Manager** (green play button).
    * Click the **"Manage Script Directories"** button (the button which looks like an itemize symbol).
-   * Add the folder containing the downloaded `DelphiReSym.py` via the green ➕ icon.
+   * Add the folder containing the downloaded `DelphiReSym.py` via the green plus icon.
    * Close the bundle manager.
 
 5. **Run the tool**:
 
    * Locate the script "DelphiReSym.py" in the Script Manager list (bundled in the "Delphi" directory).
-   * Click it, then press the **green ▶️ button** ("Run Script").
+   * Click it, then press the **green play button** ("Run Script").
    * If the imported binary is supported, a progress bar and status messages will appear in the Ghidra console.
 
 
@@ -100,22 +100,21 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
 
 
 
-## ⚠️ Limitations & known bugs:
+## ⚠️ Limitations, warnings & known bugs:
 * The tool only works on **unpacked** Delphi binaries. Packed binaries will most likely not contain accessible metadata. Use a service like [UnpacMe by OALabs](https://www.unpac.me/) if needed.
-* Internal Delphi types are currently mapped to generic pointers for readability only (see [TODOs](https://github.com/WenzWenzWenz/DelphiReSym/tree/main?tab=readme-ov-file#-roadmap)).
-* If you encounter problems when displaying template names, refer to [this issue](https://github.com/WenzWenzWenz/DelphiReSym/issues/2): Ghidra's decompilation and disassembly views only display template names of up to 10 characters by default. However, changing it within the settings solves the problem. 
+* The tool makes use of Ghidra-API's replacement conflict handler. This means that if a user has created data types etc. before the tool's execution, those with conflicting names may be forcefully overwritten! 
+* If you encounter problems when displaying template names, refer to [this issue](https://github.com/WenzWenzWenz/DelphiReSym/issues/2): Ghidra's decompilation and disassembly views only display template names of up to 10 characters by default. However, changing it within the settings solves the problem.
 
 
 
 ## 📝 Roadmap
 
-- [ ] *Current: Enhance script's general prettiness* ✨
 - [ ] Increase coverage of Delphi versions:
    - [ ] Finish format analysis. Initial format analysis for Delphi versions *Delphi 2* through *Delphi 2006* has been conducted (hopefully works for *Delphi 2007* as well).
    - [ ] Evaluate efficacy for old samples of Malware families.
-   - [ ] Integrate logging functionality for errors.
+- [ ] Integrate logging functionality for errors and make error handling prettier.
 - [ ] Integrate Ghidra [headless mode](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)
-- [X] Implement parser for Delphi templates
+- [X] Implement recursive descent parser for Delphi templates
 - [X] Several bug fixes
 - [ ] *Current: Feature replace typecasts with actual RTTI datatype structures (credit goes to [@huettenhain](https://github.com/huettenhain)!)*
 
