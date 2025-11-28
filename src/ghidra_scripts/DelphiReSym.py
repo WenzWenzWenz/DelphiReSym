@@ -12,21 +12,22 @@ A Delphi symbol name recovery tool. Uses after-compilation metadata to reconstru
 function signatures.
 """
 from __future__ import annotations
+
 import pyghidra
 
 from typing import TYPE_CHECKING, cast, Optional, Any, NamedTuple
 from dataclasses import dataclass, field
 
 if TYPE_CHECKING:
-    from ghidra.ghidra_builtins import createFunction, createClass, getFunctionAt              # type: ignore
+    from ghidra.ghidra_builtins import createFunction, createClass, getFunctionAt   # type: ignore
 
-from ghidra.program.model.symbol import SourceType, Namespace                   # type: ignore
-from ghidra.program.model.listing import ParameterImpl, Function, Program       # type: ignore
-from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock # type: ignore
-from ghidra.program.model.address import Address, AddressOutOfBoundsException   # type: ignore
-from ghidra.util.task import TaskMonitor                                        # type: ignore
-from ghidra.util.exception import InvalidInputException, DuplicateNameException # type: ignore
-from ghidra.program.model.data import (                                         # type: ignore
+from ghidra.program.model.symbol import SourceType, Namespace                       # type: ignore
+from ghidra.program.model.listing import ParameterImpl, Function, Program           # type: ignore
+from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock     # type: ignore
+from ghidra.program.model.address import Address, AddressOutOfBoundsException       # type: ignore
+from ghidra.util.task import TaskMonitor                                            # type: ignore
+from ghidra.util.exception import InvalidInputException, DuplicateNameException     # type: ignore
+from ghidra.program.model.data import (                                             # type: ignore
     DataTypeConflictHandler,
     DataType,
     PointerDataType,
