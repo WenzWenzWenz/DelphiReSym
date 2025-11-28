@@ -4,6 +4,7 @@ _DelphiReSym_ is a reverse engineering utility that reconstructs **fully qualifi
 
 _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to ease the reverse engineering process of Delphi malware and legacy applications by restoring as much human-readable semantic context from metadata as possible.
 
+<img width="1263" height="603" alt="DelphiReSym_before_after" src="https://github.com/user-attachments/assets/5c972cd5-0aa0-49ea-bdbc-57c942100b5a" />
 
 
 ## 🛠️ How to run
