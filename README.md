@@ -1,8 +1,8 @@
 # DelphiReSym – A Delphi Symbol Name Recovery Tool for Reverse Engineers
 
-_DelphiReSym_ is a reverse engineering utility that reconstructs **fully qualified Delphi symbol names** from after-compilation metadata embedded in Delphi executables. This includes function names, return types, parameter types, and parameter names. With the next release, the tool will also be able to auto create VMTs and add them to Ghidra's Data Type Manager.
+_DelphiReSym_ is a reverse engineering utility that reconstructs **fully qualified Delphi symbol names** from after-compilation metadata embedded in Delphi executables. This includes function names, return types, parameter types, and parameter names. The tool also automatically creates VT structures into Ghidra's Data Type Manager, which get filled with recovered inherited functions and virtual functions for any recovered virtual method table.
 
-_DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to ease the reverse engineering process of Delphi malware and legacy applications by restoring as much human-readable semantic context as possible.
+_DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to ease the reverse engineering process of Delphi malware and legacy applications by restoring as much human-readable semantic context from metadata as possible.
 
 
 
@@ -29,12 +29,12 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
    * Add the folder containing the downloaded `DelphiReSym.py` via the green plus icon.
    * Close the bundle manager.
 
-5. **Run the tool**:
+5. **Run the tool (twice)**:
 
    * Locate the script "DelphiReSym.py" in the Script Manager list (bundled in the "Delphi" directory).
    * Click it, then press the **green play button** ("Run Script").
    * If the imported binary is supported, a progress bar and status messages will appear in the Ghidra console.
-
+   * _**⚠️ FOR NOW, RUN THE TOOL TWICE IN A ROW TO GET BEST RESULTS ⚠️**_
 
 
 ## 💻 Requirements
@@ -68,6 +68,8 @@ _DelphiReSym_ supports the following Delphi versions, which share compatible met
 * Delphi 12 Athens
 
 Versions beyond Delphi 12 **may** work, **provided** they retain the same compiler metadata format.
+
+> With Delphi 13 Florence released, I aim to dig into its file format soon.
 
 
 
@@ -111,12 +113,14 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
 
 - [ ] Increase coverage of Delphi versions:
    - [ ] Finish format analysis. Initial format analysis for Delphi versions *Delphi 2* through *Delphi 2006* has been conducted (hopefully works for *Delphi 2007* as well).
-   - [ ] Evaluate efficacy for old samples of Malware families.
-- [ ] Integrate logging functionality for errors and make error handling prettier.
+   - [ ] Evaluate practical efficacy for old samples of Malware families.
+- [ ] Analyse the file format of new Delphi version 13.
+- [ ] Integrate logging functionality for errors and make error handling prettier. Maybe auto detect Delphi versions.
+- [ ] Use Ghidra's Function ID feature -> create Ghidra signatures (e.g. for omni-present 64bit Delphi functions)
 - [ ] Integrate Ghidra [headless mode](https://github.com/NationalSecurityAgency/ghidra/blob/master/Ghidra/Features/PyGhidra/src/main/py/README.md)
+- [ ] QoL feature: If the tool detects code that Ghidra has not yet detected as such, envoke disassembler ourselves.
 - [X] Implement recursive descent parser for Delphi templates
-- [X] Several bug fixes
-- [ ] *Current: Feature replace typecasts with actual RTTI datatype structures (credit goes to [@huettenhain](https://github.com/huettenhain)!)*
+- [X] New feature: replace typecasts with actual RTTI datatype structures (credit goes to [@huettenhain](https://github.com/huettenhain)!)
 
 
 
