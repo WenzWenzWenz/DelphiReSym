@@ -945,7 +945,7 @@ def insert_virtual_functions_to_vt_data_type(
 
 
 def add_virtual_data_type(
-    data_type: DataType,
+    data_type: StructureDataType,
     vmt_addr: Address,
     data_type_name: str,
     settings: ArchitectureSpecificSettings,
@@ -965,37 +965,35 @@ def add_virtual_data_type(
     # insert data of inherited functions
     vt_data_type = StructureDataType(CategoryPath("/"), vt_data_type_name, 0)
     inherited_functions_start_address = vmt_addr.add(11 * ptr_size)
-    vt_data_type = add_data_to_vt_data_type(
+
+    add_data_to_vt_data_type(
         vt_data_type=vt_data_type,
         start_address=inherited_functions_start_address,
         end_address=inherited_functions_start_address.add(11 * ptr_size),
         insertion_offset=0,
         settings=settings,
     )
-
-    # insert data of virtual functions
-    vt_data_type = insert_virtual_functions_to_vt_data_type(
+    insert_virtual_functions_to_vt_data_type(
         vt_data_type, vmt_addr, settings
     )
 
-    # link data_type, vt_data_type, its pointer and the typedef on that with shifted pointer offset
     vt_data_type = data_types.addDataType(
         vt_data_type, DataTypeConflictHandler.REPLACE_HANDLER
     )
-    vt_pointer_data_type = PointerDataType(vt_data_type)
-    component_offset = 0x2C if ptr_size == 4 else 0x58
+
+    component_offset = 12 * ptr_size
     typedef_data_type = PointerTypedef(
         vt_data_type_name + "_shiftedPtr",
-        vt_pointer_data_type,
+        vt_data_type,
         ptr_size,
         data_types,
         component_offset,
     )
-    data_types.addDataType(typedef_data_type, DataTypeConflictHandler.REPLACE_HANDLER)
+    typedef_data_type = data_types.addDataType(typedef_data_type, DataTypeConflictHandler.REPLACE_HANDLER)
     if data_type.getNumComponents() > 0:
-        data_type.replace(0, vt_pointer_data_type, ptr_size, "VT", data_type_comment)
+        data_type.replace(0, typedef_data_type, ptr_size, "VT", data_type_comment)
     else:
-        data_type.add(vt_pointer_data_type, ptr_size, "VT", data_type_comment)
+        data_type.add(typedef_data_type, ptr_size, "VT", data_type_comment)
 
 
 class DataTypeInformation(NamedTuple):
