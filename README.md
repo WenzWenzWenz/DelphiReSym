@@ -24,7 +24,7 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 
 4. **Load the script**:
 
-   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases/tag/latest_version) *(or the main branch, but that one might not be stable)*.
+   * Download the script from this repo's [releases](https://github.com/WenzWenzWenz/DelphiReSym/releases) *(or the main branch, but that one might not be stable)*.
    * Go to **Window > Script Manager** (green play button).
    * Click the **"Manage Script Directories"** button (the button which looks like an itemize symbol).
    * Add the folder containing the downloaded `DelphiReSym.py` via the green plus icon.
@@ -86,7 +86,7 @@ Certain Delphi versions use **incompatible metadata formats**, which are not yet
 The visual timeline illustrates the assumed format divergences, under the assumption that Delphi 2009 is not supported. Sections marked **red** and **yellow** in that timeline are unsupported and might have a more fine-grained format change history.
 ![alt text](https://github.com/WenzWenzWenz/ghidra_scripts/blob/main/timeline.png) "Figure 1.: Overview of the various changes in Delphi's file format aligned to its historical timeline.")
 
-For an in-depth explanation of Delphi's executable format evolution, refer to my [academic work](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/Academic_work.pdf).
+For an in-depth explanation of Delphi's executable format evolution, refer to my [academic work](https://github.com/WenzWenzWenz/DelphiReSym/blob/main/Academic_work_v2.pdf).
 
 
 
