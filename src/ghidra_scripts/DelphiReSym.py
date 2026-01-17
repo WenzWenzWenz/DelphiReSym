@@ -393,6 +393,10 @@ class VmtMdtMapping:
 ###################################################################################################
 #    MAIN LOGIC - RTTI_CLASS RELATED                                                              #
 ###################################################################################################
+class FalsePositiveVMTError(Exception):
+    """False positive VMT was detected during RTTI object traversal."""
+
+
 def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) -> str | None:
     """
     Traverse a Delphi RTTI object and extract string information based on its magic byte.
@@ -402,7 +406,10 @@ def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) 
     the structure of the different RTTI object types have not yet been fully understood.
     """
     memory_interface = currentProgram.getMemory()
-    magic_byte = memory_interface.getByte(addr) & 0xFF
+    try:
+        magic_byte = memory_interface.getByte(addr) & 0xFF
+    except MemoryAccessException as e:
+        raise FalsePositiveVMTError from e
 
     if magic_byte > 0x15:
         warning(f"Tried to traverse data @{addr}, but it's not an RTTI object! Skipping.")
@@ -439,7 +446,16 @@ def add_namespace_information(
         if vmt not in symbol_info.entries:
             continue
 
-        symbol_info.entries[vmt].namespace = traverse_rtti_object(rtti, settings)
+        try:
+            namespace = traverse_rtti_object(rtti, settings)
+            symbol_info.entries[vmt].namespace = namespace
+        except FalsePositiveVMTError as e:
+            warning(
+                f"Caught MemoryAccessException {e=}. Most likely due to false positive in the VMT"
+                "detection heuristic."
+            )
+            del symbol_info.entries[vmt]
+            continue
 
     debug(f"Final dictionary information after add_namespace_information(): {symbol_info}")
     return symbol_info
@@ -544,7 +560,7 @@ def traverse_parameter_entries(
         try:
             rtti = read_ptr(read_ptr(current_addr, settings.ptr_size), settings.ptr_size)
             rtti_namespace = traverse_rtti_object(rtti, settings)
-        except Exception:
+        except (MemoryAccessException, FalsePositiveVMTError):
             rtti = None
             rtti_namespace = None
         parameter_name_addr = current_addr.add(settings.ptr_size + 2)
@@ -630,8 +646,11 @@ def extract_return_type(
             dereferenced_return_type_addr, settings.ptr_size
         )
         return_type_str = traverse_rtti_object(doubly_dereferenced_return_type_addr, settings)
-    except MemoryAccessException:
-        warning(warning(f"Read of return type failed. Skipping ME: {method_entry_addr}."))
+    except (MemoryAccessException, FalsePositiveVMTError) as e:
+        warning(
+            f"Read of return type failed. Skipping ME: {method_entry_addr}. Caught "
+            f"Exception: {e=}"
+        )
         return None, None
 
     return return_type_at, return_type_str
