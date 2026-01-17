@@ -1191,7 +1191,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping, settings: ArchitectureSpecific
 def print_final_stats(
     original_function_count: int,
     total_function_count: int,
-    vmt_addresses: list[Address],
+    vmt_count: int,
     recovery_counts: dict[str, int],
 ) -> None:
     """
@@ -1204,11 +1204,8 @@ def print_final_stats(
 
     info(f"[8/8] Statistics: Pre-execution number of functions: {original_function_count}")
     info(f"[8/8] Statistics: Post-execution number of functions: {total_function_count}")
-    info(f"[8/8] Statistics: Number of VMTs found: {len(vmt_addresses)}")
-    if not vmt_addresses:
-        total = 100
-    else:
-        total = recovery_counts['vmt'] / len(vmt_addresses) * 100
+    info(f"[8/8] Statistics: Number of VMTs found: {vmt_count}")
+    total = recovery_counts["vmt"] / vmt_count * 100
     info(
         f"[8/8] Statistics: Number of symbol recovered VMTs: {recovery_counts['vmt']}, yielding "
         f"{total:.2f}% of all found VMTs."
@@ -1273,8 +1270,9 @@ def main() -> None:
     info("[7/8] Reconstructing all symbol names...")
     recovery_counts = apply_symbols(all_symbols, settings)
 
+    vmt_count = len(all_symbols.entries)
     total_function_count = currentProgram.getFunctionManager().getFunctionCount()
-    print_final_stats(original_function_count, total_function_count, vmt_addresses, recovery_counts)
+    print_final_stats(original_function_count, total_function_count, vmt_count, recovery_counts)
     info("[8/8] Finished.")
 
     # the following two lines are for debugging purposes only
