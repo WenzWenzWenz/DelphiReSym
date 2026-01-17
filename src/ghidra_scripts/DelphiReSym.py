@@ -19,15 +19,15 @@ from typing import TYPE_CHECKING, cast, Optional, Any, NamedTuple
 from dataclasses import dataclass, field
 
 if TYPE_CHECKING:
-    from ghidra.ghidra_builtins import createFunction, createClass, getFunctionAt   # type: ignore
+    from ghidra.ghidra_builtins import createFunction, createClass, getFunctionAt  # type: ignore
 
-from ghidra.program.model.symbol import SourceType, Namespace                       # type: ignore
-from ghidra.program.model.listing import ParameterImpl, Function, Program           # type: ignore
-from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock     # type: ignore
-from ghidra.program.model.address import Address, AddressOutOfBoundsException       # type: ignore
-from ghidra.util.task import TaskMonitor                                            # type: ignore
-from ghidra.util.exception import InvalidInputException, DuplicateNameException     # type: ignore
-from ghidra.program.model.data import (                                             # type: ignore
+from ghidra.program.model.symbol import SourceType, Namespace  # type: ignore
+from ghidra.program.model.listing import ParameterImpl, Function, Program  # type: ignore
+from ghidra.program.model.mem import MemoryAccessException, Memory, MemoryBlock  # type: ignore
+from ghidra.program.model.address import Address, AddressOutOfBoundsException  # type: ignore
+from ghidra.util.task import TaskMonitor  # type: ignore
+from ghidra.util.exception import InvalidInputException, DuplicateNameException  # type: ignore
+from ghidra.program.model.data import (  # type: ignore
     DataTypeConflictHandler,
     DataType,
     PointerDataType,
@@ -775,7 +775,7 @@ class RecursiveDescentParser:
     which are longer than 10 characters are not shown correctly in decompiler view.
 
     EBNF-Grammar:
-        fqn = namespace , { "." , namespace } , [ template ] ;
+        fqn = namespace , [ template ] , { "." , namespace , [ template ] } ;
         template = "<" , fqn { "," , fqn } , ">" ;
         namespace = letter | "_" , { letter | digit | "_" | ")" | "(" } ;
         letter = "A" ... "Z" | "a" ... "z" ;
@@ -795,20 +795,19 @@ class RecursiveDescentParser:
             raise ValueError(f"Unexpected character during parsing: {self.string[self.pos]=}.")
         self.pos += 1
 
-    # fqn = namespace , { "." , namespace } , [ template ] ;
+    # fqn = namespace , [ template ] , { "." , namespace , [ template ] } ;
     def parse_fqn(self, trim_mode: bool = False) -> tuple[list[str], str]:
         namespaces = [self._parse_namespace()]
+        if self._peek() == "<":
+            namespaces[-1] += self._parse_template()
+
         while self._peek() == ".":
             self._consume(".")
             namespaces.append(self._parse_namespace())
+            if self._peek() == "<":
+                namespaces[-1] += self._parse_template()
 
         transmuted_fqn = namespaces[-1] if trim_mode else ".".join(namespaces)
-
-        if self._peek() == "<":
-            trimmed_template = self._parse_template()
-            namespaces[-1] += trimmed_template
-            transmuted_fqn += trimmed_template
-
         return namespaces, transmuted_fqn
 
     # template = "<" , fqn { "," , fqn } , ">" ;
@@ -853,13 +852,20 @@ def prepare_namespace(namespace_str: str) -> Namespace:
     """
     Given a full namespace as a dot separated string, create each namespace according to the string.
 
-    Returns the deepest namespace object in the string defined hierarchy.
+    Returns the deepest namespace object in the string defined hierarchy or global namespace.
     """
     symbol_table = currentProgram.getSymbolTable()
     parent_namespace = currentProgram.getGlobalNamespace()
 
     parser = RecursiveDescentParser(namespace_str)
-    parts, _ = parser.parse_fqn()
+    try:
+        parts, _ = parser.parse_fqn()
+    except ValueError as e:
+        warning(
+            f"Caught ValueError {e=} when encountering {namespace_str=}. "
+            "Falling back to global namespace. Please open an issue on GitHub. Thanks."
+        )
+        return currentProgram.getGlobalNamespace()
 
     for part in parts:
         check_cancel()
