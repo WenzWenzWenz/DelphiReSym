@@ -67,10 +67,11 @@ _DelphiReSym_ supports the following Delphi versions, which share compatible met
 * Delphi 10.4 Sydney
 * Delphi 11 Alexandria
 * Delphi 12 Athens
+* Delphi 13 Florence
 
-Versions beyond Delphi 12 **may** work, **provided** they retain the same compiler metadata format.
+Versions beyond Delphi 13 **may** work, **provided** they retain the same compiler metadata format.
 
-> With Delphi 13 Florence released, I aim to dig into its file format soon.
+> With **Delphi 13 Florence** somewhat freshly baked, I dug into its file format and can gratefully pronounce: **NO APPARENT CHANGES IN FILE FORMAT**!!! 🎉🎉🎉
 
 
 
