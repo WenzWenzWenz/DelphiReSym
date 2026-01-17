@@ -309,7 +309,9 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
                     continue
 
                 vmt_addresses.append(current_address)
-                debug(f"VMT @ {current_address} passed sanity checks. Adding it to the list of VMTs.")
+                debug(
+                    f"VMT @ {current_address} passed sanity checks. Adding it to the list of VMTs."
+                )
 
         current_address = current_address.add(1)
 
@@ -372,7 +374,7 @@ class MeInfo:
 
     def get_return_type_string(self) -> str:
         if (type_string := self.return_type_str) is None:
-            return 'void'
+            return "void"
         return type_string
 
 
@@ -409,7 +411,7 @@ def traverse_rtti_object(addr: Address, settings: ArchitectureSpecificSettings) 
     rtti_object_name_field = addr.add(1)
     rtti_object_name = read_pascal_str(rtti_object_name_field)
 
-    # not of type RTTI_Class  # TODO: Think about mapping WideStr etc. to `System.` instead of PaUni 
+    # not of type RTTI_Class  # TODO: Think about mapping WideStr etc. to `System.` instead of PaUni
     if magic_byte != 0x07:
         return rtti_object_name
 
@@ -661,11 +663,15 @@ def extract_parameters(
     first_parameter_entry_field = num_of_parameter_entries_field.add(2)
     # address outside the .text section => false positive
     if not (
-        settings.text_block_start_addr <= first_parameter_entry_field <= settings.text_block_end_addr
+        settings.text_block_start_addr
+        <= first_parameter_entry_field
+        <= settings.text_block_end_addr
     ):
         return None
 
-    return traverse_parameter_entries(first_parameter_entry_field, num_of_parameter_entries, settings)
+    return traverse_parameter_entries(
+        first_parameter_entry_field, num_of_parameter_entries, settings
+    )
 
 
 def traverse_method_entries(
@@ -811,8 +817,12 @@ class RecursiveDescentParser:
                 f"{self.string[self.pos]=}, {self.string=}."
             )
         self._consume()
-        while self._peek() is not None and (self._peek().isalnum() or self._peek() == "_" or
-                                            self._peek() == ")" or self._peek() == "("):
+        while self._peek() is not None and (
+            self._peek().isalnum()
+            or self._peek() == "_"
+            or self._peek() == ")"
+            or self._peek() == "("
+        ):
             self._consume()
         return self.string[namespace_start_pos : self.pos]
 
@@ -937,9 +947,7 @@ def insert_virtual_functions_to_vt_data_type(
 
         break
     else:
-        warning(
-            f"Used VMT-field 'ClassName' as an end marker for virtual funcs of VMT@{vmt_addr}"
-        )
+        warning(f"Used VMT-field 'ClassName' as an end marker for virtual funcs of VMT@{vmt_addr}")
 
     return vt_data_type
 
@@ -973,13 +981,9 @@ def add_virtual_data_type(
         insertion_offset=0,
         settings=settings,
     )
-    insert_virtual_functions_to_vt_data_type(
-        vt_data_type, vmt_addr, settings
-    )
+    insert_virtual_functions_to_vt_data_type(vt_data_type, vmt_addr, settings)
 
-    vt_data_type = data_types.addDataType(
-        vt_data_type, DataTypeConflictHandler.REPLACE_HANDLER
-    )
+    vt_data_type = data_types.addDataType(vt_data_type, DataTypeConflictHandler.REPLACE_HANDLER)
 
     component_offset = 12 * ptr_size
     typedef_data_type = PointerTypedef(
@@ -989,7 +993,9 @@ def add_virtual_data_type(
         data_types,
         component_offset,
     )
-    typedef_data_type = data_types.addDataType(typedef_data_type, DataTypeConflictHandler.REPLACE_HANDLER)
+    typedef_data_type = data_types.addDataType(
+        typedef_data_type, DataTypeConflictHandler.REPLACE_HANDLER
+    )
     if data_type.getNumComponents() > 0:
         data_type.replace(0, typedef_data_type, ptr_size, "VT", data_type_comment)
     else:
@@ -1032,9 +1038,7 @@ def prepare_data_type(
         except DuplicateNameException:
             pass
 
-        data_type_path = CategoryPath(
-            "/" + class_namespace.getName(True).replace("::", "/")
-        )
+        data_type_path = CategoryPath("/" + class_namespace.getName(True).replace("::", "/"))
         data_type = StructureDataType(data_type_path, class_name, 0)
         registered_data_type = data_types.addDataType(
             data_type,
@@ -1144,7 +1148,9 @@ def apply_parameter_tuples(
     return 1
 
 
-def apply_symbols(all_symbol_info: VmtMdtMapping, settings: ArchitectureSpecificSettings) -> dict[str, int]:
+def apply_symbols(
+    all_symbol_info: VmtMdtMapping, settings: ArchitectureSpecificSettings
+) -> dict[str, int]:
     """
     Handles the actual symbol name recovering, given all previously gathered information.
 
@@ -1177,9 +1183,7 @@ def apply_symbols(all_symbol_info: VmtMdtMapping, settings: ArchitectureSpecific
             if apply_return_types(entry, me_info.get_return_type_string()):
                 apply_count["return"] += 1
 
-            if apply_parameter_tuples(
-                entry, me_info.parameter_entries, mdt_me_info.namespace
-            ):
+            if apply_parameter_tuples(entry, me_info.parameter_entries, mdt_me_info.namespace):
                 apply_count["parameter_set"] += 1
 
     return apply_count
@@ -1283,6 +1287,7 @@ def main() -> None:
 if pyghidra.started():
     if ENABLE_PROFILING:
         import yappi
+
         yappi.set_clock_type("wall")
         yappi.start()
     else:
@@ -1296,6 +1301,7 @@ if pyghidra.started():
     finally:
         if yappi is not None:
             import pathlib
+
             path = pathlib.Path(__file__)
             path = path.parent / f"{path.stem}.perf"
             info(f"profiling information has been written to: {path.absolute()}")
