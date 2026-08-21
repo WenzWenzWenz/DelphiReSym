@@ -160,11 +160,18 @@ def warning(msg: str) -> None:
 ###################################################################################################
 #    HELPER FUNCTIONS                                                                             #
 ###################################################################################################
+_MEMORY_CACHE = None
+
+
 def read_ptr(addr: Address, ptr_size: int) -> Address:
     """
     Read a specified address of the given size from memory.
     """
-    memory = currentProgram.getMemory()
+    # PERF (2026-08-21): getMemory() was called once per byte scanned.
+    global _MEMORY_CACHE
+    if _MEMORY_CACHE is None:
+        _MEMORY_CACHE = currentProgram.getMemory()
+    memory = _MEMORY_CACHE
     return (
         convert_to_addr(memory.getInt(addr))
         if ptr_size == 4
@@ -291,9 +298,67 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
 
     text_block_size = settings.text_block_end_addr.subtract(settings.text_block_start_addr)
 
+    # PERF (2026-08-21): fast candidate pass.
+    # The original walked .text one byte at a time, crossing the JPype boundary about
+    # seven times per byte. On a 30 MB .text that is ~200 million crossings. This reads
+    # the section once and locates candidate offsets with vectorised arithmetic, then
+    # hands every candidate to the ORIGINAL check below. The fast pass is a superset:
+    # it can only add work, never remove a candidate the original would have accepted.
+    candidate_offsets = None
+    try:
+        import jpype
+        import numpy as np
+
+        n_bytes = int(text_block_size) + 1
+        jbuf = jpype.JArray(jpype.JByte)(n_bytes)
+        got = currentProgram.getMemory().getBytes(settings.text_block_start_addr, jbuf)
+        if got == n_bytes and settings.ptr_size == 4:
+            a = np.frombuffer(memoryview(jbuf), dtype=np.uint8)
+            n = n_bytes - (settings.ptr_size - 1)
+            v = (
+                a[0:n].astype(np.uint32)
+                | (a[1:n + 1].astype(np.uint32) << 8)
+                | (a[2:n + 2].astype(np.uint32) << 16)
+                | (a[3:n + 3].astype(np.uint32) << 24)
+            )
+            base = int(settings.text_block_start_addr.getOffset())
+            offs = (base + np.arange(n, dtype=np.int64)) & 0xFFFFFFFF
+            diff = (v.astype(np.int64) - offs) & 0xFFFFFFFF
+            candidate_offsets = np.nonzero(diff == int(settings.jump_dist))[0]
+            info(
+                f"[1/8] Fast pass: {len(candidate_offsets)} candidate(s) in "
+                f"{n_bytes} bytes of .text."
+            )
+    except Exception as exc:  # numpy missing, uninitialised memory, 64-bit, anything
+        warning(f"[1/8] Fast pass unavailable ({exc}); falling back to the byte walk.")
+        candidate_offsets = None
+
+    if candidate_offsets is not None:
+        base_addr = settings.text_block_start_addr
+        for i, off in enumerate(candidate_offsets):
+            if i % 256 == 0:
+                check_cancel()
+            current_address = base_addr.add(int(off))
+            try:
+                current_val = read_ptr(current_address, settings.ptr_size)
+            except MemoryAccessException:
+                continue
+            if current_val.subtract(current_address) != settings.jump_dist:
+                continue
+            if not check_vmt_candidate(current_address, current_val, settings):
+                debug(f"REJECTED VMT candidate @ {current_address}. Didn't pass sanity checks.")
+                continue
+            vmt_addresses.append(current_address)
+            debug(f"VMT @ {current_address} passed sanity checks. Adding it to the list of VMTs.")
+        return vmt_addresses
+
+    # ---- original byte walk, retained as the fallback ----
     current_address = settings.text_block_start_addr
+    steps = 0
     while current_address < settings.text_block_end_addr.subtract(settings.ptr_size - 1):
-        check_cancel()
+        # PERF: monitor was queried every byte.
+        if steps % 65536 == 0:
+            check_cancel()
 
         try:
             current_val = read_ptr(current_address, settings.ptr_size)
@@ -306,6 +371,7 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
                 if not check_vmt_candidate(current_address, current_val, settings):
                     debug(f"REJECTED VMT candidate @ {current_address}. Didn't pass sanity checks.")
                     current_address = current_address.add(1)
+                    steps += 1
                     continue
 
                 vmt_addresses.append(current_address)
@@ -314,15 +380,15 @@ def find_vmts(settings: ArchitectureSpecificSettings) -> list[Address]:
                 )
 
         current_address = current_address.add(1)
+        steps += 1
 
-        # progress bar, since this part of the code takes the longest amount of time
-        if VERBOSE_INFO:
-            progress = current_address.subtract(settings.text_block_start_addr)
-            if progress % 100000 == 0:
-                info(
-                    f"[1/8] Processed {round((progress / text_block_size) * 100)}% addresses in .text "
-                    "section."
-                )
+        # PERF: this used to call Address.subtract() on every byte before testing the
+        # modulus. The counter is free.
+        if VERBOSE_INFO and steps % 100000 == 0:
+            info(
+                f"[1/8] Processed {round((steps / text_block_size) * 100)}% addresses in .text "
+                "section."
+            )
 
     return vmt_addresses
 
