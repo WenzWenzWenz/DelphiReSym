@@ -1167,7 +1167,7 @@ def apply_parameter_tuples(
             *params,
         )
     # skip in case of invalid symbol names
-    except InvalidInputException:
+    except (InvalidInputException, DuplicateNameException):
         return 0
 
     return 1
