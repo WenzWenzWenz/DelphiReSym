@@ -1058,7 +1058,7 @@ def add_virtual_data_type(
 
     data_types = currentProgram.getDataTypeManager()
     ptr_size = settings.ptr_size
-    vt_data_type_name = "VT_" + data_type_name
+    vt_data_type_name = "VT_" + clean_string(data_type_name)
     data_type_comment = "A pointer to the corresponding VT structure."
 
     # insert data of inherited functions
@@ -1156,12 +1156,12 @@ def apply_function_names(function_entry_point: Address, function_name: str | Non
     # if ghidra doesn't recognize this address already as a function
     if not function:
         # creating via the light-weight FlatProgramAPI function sets a name automatically
-        function = createFunction(convert_to_addr(function_entry_point), function_name)
+        function = createFunction(convert_to_addr(function_entry_point), clean_string(function_name))
         if function is None:
             return 0
     else:
         # if function is already been known to ghidra, replace its name
-        function.setName(function_name, SourceType.USER_DEFINED)
+        function.setName(clean_string(function_name), SourceType.USER_DEFINED)
 
     return 1
 
@@ -1279,6 +1279,11 @@ def apply_symbols(
 
     return apply_count
 
+def clean_string(input: str|None):
+    if input is None:
+        return None
+    import re
+    return re.sub(r'[^a-zA-Z0-9 ]', '', input)
 
 ###################################################################################################
 #    MAIN LOGIC - ACTUAL MAIN                                                                     #
