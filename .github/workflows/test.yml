@@ -1,0 +1,72 @@
+name: Recovery tests
+on:
+  push:
+    branches: [main, 'fix/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: recovery-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q src tests .github/ci
+  ghidra:
+    needs: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        sample: [delphi7, inno2009, inno-rio, inno-athens-x86, inno-athens-x64, heidi-x86, heidi-x64]
+    env:
+      JAVA_TOOL_OPTIONS: -Xmx5g
+      SAMPLE: ${{ matrix.sample }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Download and verify Ghidra and real binary
+        run: python .github/ci/prepare.py --root "$RUNNER_TEMP/recovery" --sample "$SAMPLE"
+      - name: Install the wheels shipped inside the verified Ghidra release
+        run: |
+          python -m venv "$RUNNER_TEMP/recovery/venv"
+          "$RUNNER_TEMP/recovery/venv/bin/python" -m pip install --no-index --only-binary=:all: --find-links "$RUNNER_TEMP/recovery/ghidra_12.2_PUBLIC/Ghidra/Features/PyGhidra/pypkg/dist" pyghidra==3.2.0
+      - name: Analyze real PE and verify metadata application
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/ghidra-config
+          XDG_CACHE_HOME: ${{ runner.temp }}/ghidra-cache
+        run: |
+          "$RUNNER_TEMP/recovery/venv/bin/python" .github/ci/run.py --root "$RUNNER_TEMP/recovery" --sample "$SAMPLE"
+      - name: Upload diagnostic results
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: recovery-${{ matrix.sample }}
+          path: ${{ runner.temp }}/recovery/results/
+          if-no-files-found: ignore
+          retention-days: 7

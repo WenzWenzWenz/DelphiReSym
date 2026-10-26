@@ -1,0 +1,51 @@
+{
+  "description": "Two real Ghidra analysis/application passes; source hashes match the script tested. Four records change in the second x86 pass. This is not source-ground-truth validation of every type.",
+  "results": [
+    {
+      "source_sha256": "d477a091e7012d3c3b21edaf0f29d3ab52c120b59e2513816a4d66a4969346ea",
+      "verified_vt_components": 14399,
+      "binary": "1d4e54529feef53850f97f39029a906d53f3d4b2aea8373e27c413324a55681c.exe",
+      "first_functions": 14481,
+      "second_functions": 14481,
+      "changed_second_pass": 4,
+      "ghidra_version": "12.2",
+      "binary_sha256": "1d4e54529feef53850f97f39029a906d53f3d4b2aea8373e27c413324a55681c",
+      "uint64_bytes": 8,
+      "tobject_examples": {
+        "004081ac": {
+          "name": "System::TObject::Create",
+          "signature": "void Create(TObject * Self)",
+          "parameters": 1
+        },
+        "004081dc": {
+          "name": "System::TObject::Free",
+          "signature": "void Free(TObject * Self)",
+          "parameters": 1
+        }
+      }
+    },
+    {
+      "source_sha256": "d477a091e7012d3c3b21edaf0f29d3ab52c120b59e2513816a4d66a4969346ea",
+      "verified_vt_components": 3518,
+      "binary": "innosetup-7.1.0-x64.exe",
+      "first_functions": 4678,
+      "second_functions": 4678,
+      "changed_second_pass": 0,
+      "ghidra_version": "12.2",
+      "binary_sha256": "0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f",
+      "uint64_bytes": 8,
+      "tobject_examples": {
+        "004092a0": {
+          "name": "System::TObject::Create",
+          "signature": "void __fastcall Create(TObject * Self)",
+          "parameters": 1
+        },
+        "00409360": {
+          "name": "System::TObject::Free",
+          "signature": "void __fastcall Free(TObject * Self)",
+          "parameters": 1
+        }
+      }
+    }
+  ]
+}
