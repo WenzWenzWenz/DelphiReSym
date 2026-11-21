@@ -48,7 +48,30 @@ _DelphiReSym_ is designed for use with **Ghidra** (via `pyghidra`) and aims to e
 
 ## ✅ Supported Delphi versions
 
-_DelphiReSym_ supports the following Delphi versions, which share compatible metadata formats:
+### Delphi 2 – 7 (legacy metadata format)
+
+* Delphi 2, 3, 4, 5, 6, 7 *(tested on Delphi 7)*
+
+These use a different metadata layout, which is detected automatically:
+
+| | Delphi 2..7 | Delphi 2009+ |
+|---|---|---|
+| Code section name | `CODE` | `.text` |
+| VMT header size | 76 bytes | 88 bytes |
+| MDT count field | at `MDT + 0` | at `MDT + 2` |
+| MDT entries | variable length `Word size; Pointer address; ShortString name` | fixed size references |
+| Recovered per method | name + entry point | name, entry point, return type, parameters |
+
+Class names and method names are recovered for these versions; parameter sets are not,
+because the metadata simply does not contain them. See
+[`research/delphi7`](research/delphi7) for how the layout was derived.
+
+The header size is auto-detected per binary. Set `DELPHIRESYM_JUMP_DIST` (e.g. `76` or
+`88`) to skip the probe on very large binaries.
+
+### Delphi 2009+
+
+The following Delphi versions share a compatible metadata format:
 
 * Delphi 2009 *(not sure if this version is supported -> couldn't be tested due to lack of 2009 binaries)*
 * Delphi 2010
@@ -113,9 +136,10 @@ On real-world Delphi malware samples (of supported versions), the tool achieved 
 
 ## 📝 Roadmap
 
-- [ ] Increase coverage of Delphi versions:
-   - [ ] Finish format analysis. Initial format analysis for Delphi versions *Delphi 2* through *Delphi 2006* has been conducted (hopefully works for *Delphi 2007* as well).
+- [x] Increase coverage of Delphi versions:
+   - [x] Format analysis for *Delphi 2* through *Delphi 7* (verified on Delphi 7). See [`research/delphi7`](research/delphi7).
    - [ ] Evaluate practical efficacy for old samples of Malware families.
+- [x] Standalone, Ghidra-free symbol extraction for Delphi 2..7: [`tools/extract_delphi_syms.py`](tools/extract_delphi_syms.py)
 - [ ] Analyse the file format of new Delphi version 13.
 - [ ] Integrate logging functionality for errors and make error handling prettier. Maybe auto detect Delphi versions.
 - [ ] Use Ghidra's Function ID feature -> create Ghidra signatures (e.g. for omni-present 64bit Delphi functions)
