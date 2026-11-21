@@ -13,6 +13,8 @@ function signatures.
 """
 from __future__ import annotations
 
+import os
+
 import pyghidra
 
 from typing import TYPE_CHECKING, cast, Optional, Any, NamedTuple
@@ -204,6 +206,9 @@ class ArchitectureSpecificSettings:
     jump_dist: int
     text_block_start_addr: Address
     text_block_end_addr: Address
+    #: Delphi 2..7 store the method table as variable length entries (see
+    #: get_method_entries()); Delphi 2009+ store fixed size entry references.
+    legacy_mdt: bool = False
 
     @property
     def mdt_offset(self) -> int:
@@ -212,6 +217,114 @@ class ArchitectureSpecificSettings:
     @property
     def rtti_offset(self) -> int:
         return self.ptr_size * 4
+
+
+#: 32-bit VMT header size. Delphi 2009 added vmtEquals/vmtGetHashCode/vmtToString to
+#: TObject, growing the header from 76 to 88 bytes.
+VMT_HEADER_SIZES = (76, 88)
+
+
+def _addr32(value: int) -> Address:
+    """
+    Build an Address from an unsigned 32-bit Python int.
+
+    toAddr()/convert_to_addr() resolve to the Java int overload, which raises
+    OverflowError for any value >= 0x80000000 -- and raw dword reads produce plenty of
+    those. Go through the address space instead, which takes a Java long.
+    """
+    value = int(value) & 0xFFFFFFFF
+    try:
+        space = currentProgram.getAddressFactory().getDefaultAddressSpace()
+        return space.getAddress(value)
+    except Exception:
+        return convert_to_addr(value)
+
+
+def _probe_header_sizes(text_section: MemoryBlock) -> dict[int, int]:
+    """
+    Score every candidate VMT header size by counting dword slots whose value is
+    (own address + header size) and whose vmtClassName field points at a printable
+    Pascal string.
+
+    That pair of conditions is what separates a real VMT from the accidental
+    "address + constant" coincidences scattered all over x86 code. On a Delphi 7
+    binary this scores ~200 for 76 and 0 for 88; on Delphi 2009+ the other way round.
+
+    Runs on plain bytes: numpy is optional in this project, and a silent fallback to
+    "no candidates" would just reintroduce the bug this probe exists to fix.
+    """
+    import struct
+
+    scores = {size: 0 for size in VMT_HEADER_SIZES}
+    n_bytes = int(text_section.getSize())
+    if n_bytes <= 0x24:
+        return scores
+
+    try:
+        import jpype
+
+        jbuf = jpype.JArray(jpype.JByte)(n_bytes)
+        if currentProgram.getMemory().getBytes(text_section.getStart(), jbuf) != n_bytes:
+            warning("Could not read the code section; assuming the default header size.")
+            return scores
+        raw = bytes(memoryview(jbuf))
+    except Exception as exc:
+        warning(f"Could not bulk-read the code section ({exc}); assuming the default.")
+        return scores
+
+    base = int(text_section.getStart().getOffset()) & 0xFFFFFFFF
+    memory_interface = currentProgram.getMemory()
+    limit = (n_bytes - 0x24) // 4 * 4
+    for i, (value,) in enumerate(struct.iter_unpack("<I", raw[:limit])):
+        offset = i * 4
+        delta = (value - (base + offset)) & 0xFFFFFFFF
+        if delta not in scores:
+            continue
+        name_ptr = struct.unpack_from("<I", raw, offset + 0x20)[0]
+        if not name_ptr:
+            continue
+        try:
+            name_len = memory_interface.getByte(_addr32(name_ptr)) & 0xFF
+            if not 1 <= name_len <= 60:
+                continue
+            name = [
+                memory_interface.getByte(_addr32(name_ptr + 1 + j)) & 0xFF
+                for j in range(name_len)
+            ]
+        except Exception:
+            continue
+        if all(0x20 <= ch <= 0x7E for ch in name):
+            scores[delta] += 1
+    return scores
+
+
+def _detect_vmt_header_size(text_section: MemoryBlock) -> int:
+    """
+    Return the 32-bit VMT header size, 76 (Delphi 2..7) or 88 (Delphi 2009+).
+
+    v1.2.2 hardcoded 88, so every Delphi 7 binary reported "Number of VMTs found: 0".
+    Set DELPHIRESYM_JUMP_DIST to skip the probe, e.g. on very large binaries.
+    """
+    override = os.environ.get("DELPHIRESYM_JUMP_DIST")
+    if override:
+        try:
+            value = int(override, 0)
+        except ValueError:
+            warning(f"Ignoring non-integer DELPHIRESYM_JUMP_DIST={override!r}.")
+        else:
+            info(f"[1/8] VMT header size forced to {value} via DELPHIRESYM_JUMP_DIST.")
+            return value
+
+    scores = _probe_header_sizes(text_section)
+    info(f"[1/8] VMT header size probe (self-pointer + class name): {scores}")
+    best = max(scores, key=lambda size: scores[size])
+    if scores[best] == 0:
+        warning(
+            "No VMT-like self-pointer found for header 76 or 88; assuming 88. "
+            "Set DELPHIRESYM_JUMP_DIST to override."
+        )
+        return 88
+    return best
 
 
 def get_architecture_settings(text_section: MemoryBlock) -> ArchitectureSpecificSettings:
@@ -224,8 +337,13 @@ def get_architecture_settings(text_section: MemoryBlock) -> ArchitectureSpecific
 
     ptr_size = currentProgram.getDefaultPointerSize()
     if ptr_size == 4:
+        jump_dist = _detect_vmt_header_size(text_section)
         return ArchitectureSpecificSettings(
-            ptr_size=4, jump_dist=88, text_block_start_addr=start, text_block_end_addr=end
+            ptr_size=4,
+            jump_dist=jump_dist,
+            text_block_start_addr=start,
+            text_block_end_addr=end,
+            legacy_mdt=(jump_dist == 76),
         )
     if ptr_size == 8:
         return ArchitectureSpecificSettings(
@@ -236,12 +354,15 @@ def get_architecture_settings(text_section: MemoryBlock) -> ArchitectureSpecific
 
 def get_text_section(memory: Memory) -> MemoryBlock:
     """
-    Retrieve the '.text' memory block from the given memory object.
+    Retrieve the code memory block from the given memory object.
+
+    Delphi 2009+ emits a PE section called '.text', but Delphi 2..7 (and some older
+    third-party linkers) name it 'CODE'. Both hold the same thing.
     """
     for section in memory.getBlocks():
-        if section.getName() == ".text":
+        if section.getName() in (".text", "CODE"):
             return section
-    raise Exception(".text segment not found")
+    raise Exception("code segment ('.text' / 'CODE') not found")
 
 
 ###################################################################################################
@@ -540,6 +661,25 @@ def get_method_entries(
     Given an instance of an MdtMeInfo dataclass, grab each method entry address and prepare MeInfo
     dataclass instances for each of them.
     """
+    if settings.legacy_mdt:
+        # Delphi 2..7: the MDT is a packed array of variable length entries,
+        #   Word size; Pointer address; ShortString name
+        # so walk it by adding each entry's own size word.
+        current = first_me_addr
+        for _ in range(num_of_method_entry_refs):
+            check_cancel()
+            try:
+                entry_size = currentProgram.getMemory().getShort(current) & 0xFFFF
+            except MemoryAccessException:
+                warning(f"Could not read MDT entry size @ {current}. Stopping.")
+                break
+            if entry_size < settings.ptr_size + 3:
+                break
+            info_entries = info.method_entries
+            info_entries[current] = MeInfo(current)
+            current = current.add(entry_size)
+        return info
+
     for i in range(num_of_method_entry_refs):
         check_cancel()
 
@@ -573,8 +713,10 @@ def traverse_mdt_top_level(
     for vmt_addr, mdt_addr in vmt_mdt_relations.items():
         check_cancel()
 
-        num_of_method_entry_refs_field = mdt_addr.add(2)
-        num_of_method_entry_refs = memory_interface.getShort(num_of_method_entry_refs_field)
+        # Delphi 2..7: the count sits at mdt+0 and the first entry starts at mdt+2.
+        # Delphi 2009+: the count sits at mdt+2 and the entry references start at mdt+4.
+        num_of_method_entry_refs_field = mdt_addr.add(0 if settings.legacy_mdt else 2)
+        num_of_method_entry_refs = memory_interface.getShort(num_of_method_entry_refs_field) & 0xFFFF
         if num_of_method_entry_refs == 0:
             continue
 
@@ -786,6 +928,22 @@ def traverse_method_entries(
 
         for method_entry_addr in mdt_me_info.method_entries.keys():
             check_cancel()
+
+            if settings.legacy_mdt:
+                # Delphi 2..7 method entries carry no return type and no parameter
+                # entries, so extract_return_type()/extract_parameters() would read past
+                # the end of the entry into the next one. Name + entry point is all there is.
+                try:
+                    entry_point = extract_function_entry_point(method_entry_addr, settings)
+                except (MemoryAccessException, AddressOutOfBoundsException):
+                    continue
+                legacy_name = extract_function_name(method_entry_addr, settings)
+                if not legacy_name:
+                    continue
+                method_entries_info.method_entries[method_entry_addr] = MeInfo(
+                    function_entry_point=entry_point, function_name=legacy_name
+                )
+                continue
 
             try:
                 function_entry_point = extract_function_entry_point(method_entry_addr, settings)
@@ -1295,6 +1453,9 @@ def print_final_stats(
     """
     if total_function_count == 0 or original_function_count == 0:
         info("[8/8] Statistics: No functions found.")
+        return
+    if vmt_count == 0:
+        info("[8/8] Statistics: No VMT found, so no symbol could be recovered.")
         return
 
     info(f"[8/8] Statistics: Pre-execution number of functions: {original_function_count}")
